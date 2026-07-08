@@ -18,6 +18,7 @@ import { RealTicker, type Ticker } from '../engine/ticker';
 import { FSM, type AudioPort, type Phase, type PhaseContext } from '../engine/fsm';
 import { defaultPhases } from '../engine/phases';
 import { roundInfo, type InterpretBook } from '../engine/round';
+import { bindMixerToHud, type MixerLike } from '../audio/bind';
 import { modeCostOf, type GameConfig } from './config';
 
 /** Passed to `mountView` — everything the game's scene needs (not the round/fsm yet). */
@@ -221,6 +222,18 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     disposers.push(reaction(() => stores.balance.balance, (b) => hud!.setBalance(b), { fireImmediately: false }));
     disposers.push(hud.on('valueChanged', (p) => { const v = p as { id?: string; value?: number }; if (v?.id === 'bet' && typeof v.value === 'number') stores.balance.setBet(v.value); }));
     disposers.push(hud.on('spinRequested', () => { if (machine.current === 'idle') void machine.transition('spin'); }));
+
+    // Auto-wire audio ↔ HUD (Music/Effects sliders + mute, persisted) + unlock on the first
+    // spin gesture — IF a mixer-like `audio` was provided. Structural check, no @schmooky/zvuk
+    // import here, so audio-less games don't bundle it. (A game may bind manually instead.)
+    const mixer = audio as unknown as MixerLike | null;
+    if (mixer && typeof mixer.bus === 'function') {
+      disposers.push(bindMixerToHud(mixer, hud));
+      if (typeof mixer.unlock === 'function') {
+        const off = hud.on('spinRequested', () => { void mixer.unlock!(); off(); });
+        disposers.push(off);
+      }
+    }
 
     // ── ACTIVE-ROUND RESUME: settle it + play it back, else idle ────────────────
     if (active?.active) {

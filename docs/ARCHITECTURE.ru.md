@@ -294,30 +294,27 @@ class MyScene {
 `ambience`), привязка к слайдерам HUD и дакинг музыки под sfx. Игра только объявляет звуки.
 
 ```ts
-import { createGameAudio, bindAudioToHud } from '@stakeplate/core/audio';
+import { createGameAudio } from '@stakeplate/core/audio';
 import spinUrl from './sfx/spin.mp3';
 import winUrl from './sfx/win.mp3';
 import baseLoop from './music/base.mp3';
 
 const audio = createGameAudio({ buses: { music: 0.8, sfx: 1 } }); // + дакинг music ← sfx
+await audio.load([                          // preload манифеста на шины — единственный шаг игры
+  { name: 'spin', url: spinUrl },                  // → шина sfx по умолчанию
+  { name: 'win',  url: winUrl, bus: 'sfx' },
+  { name: 'base', kind: 'music', loop: baseLoop }, // + intro? / outro?
+]);
 
 const game = createStakeGame<Data, View, Ev>({
   // …config, interpretBook, mountView…
-  audio,                                    // фазы зовут ctx.audio.play('win') / music('base')
-  mountView: (host, ctx) => {
-    bindAudioToHud(audio, ctx.hud);          // Music/Effects слайдеры + mute (persist в localStorage)
-    const off = ctx.hud.on('spinRequested', () => { void audio.unlock(); off(); }); // разблок на 1-м жесте
-    void audio.load([                        // preload манифеста на шины
-      { name: 'spin', url: spinUrl },                // → шина sfx по умолчанию
-      { name: 'win',  url: winUrl, bus: 'sfx' },
-      { name: 'base', kind: 'music', loop: baseLoop }, // + intro? / outro?
-    ]);
-    return new MyScene(host, ctx);
-  },
+  audio, // ← и всё: ядро САМО привяжет Music/Effects/mute и разблокирует звук на первом спине
 });
 ```
 
-Из фаз (или сцены):
+Передали `audio` — ядро само делает привязку к HUD (`bindMixerToHud`: Music→music,
+Effects→sfx с persist, Sound-toggle→mute) и `unlock()` на первом спине. Проверка структурная,
+`@schmooky/zvuk` в ядро не тянется — игры без звука его не бандлят. Из фаз/сцены зовите звук:
 
 ```ts
 ctx.audio?.play('win');                    // на шину sfx; музыка сама «пригибается» (дакинг)
@@ -333,7 +330,7 @@ ctx.audio?.stopMusic({ fade: 0.3 });
 | `audio.music(name, { fadeIn? })` · `stopMusic({ fade? })` | музыка (кроссфейд текущей) |
 | `audio.unlock()` | resume AudioContext с жеста (1 раз) + армирует дакинг |
 | `audio.bus(name)` | шина zvuk (`.level` 0..1, `.muted`, `fadeTo`, FX-вставки) |
-| `bindAudioToHud(audio, hud, { storageKey? })` | Music→music, Effects→sfx (persist), Sound-toggle→mute всех шин; возвращает disposer |
+| `bindAudioToHud(audio, hud, { storageKey? })` | Music→music, Effects→sfx (persist), Sound-toggle→mute; **ядро вызывает само** при переданном `audio` — руками только для opt-out/своей логики |
 
 - **Шины по умолчанию:** master → `music` (0.8) / `sfx` (1) / `ambience` (0.6); master headroom
   −3 dB + limiter. Свои уровни — в `createGameAudio({ buses })`.

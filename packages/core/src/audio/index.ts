@@ -6,6 +6,9 @@
 import { createEngine, Ducker, type Engine, type Bus } from '@schmooky/zvuk';
 import type { BootedHud } from '@open-slot-ui/pixi';
 import type { AudioPort } from '../engine/fsm';
+import { bindMixerToHud } from './bind';
+
+export { bindMixerToHud, type MixerLike } from './bind';
 
 export interface GameAudioOptions {
   /** Initial bus levels (0..1). */
@@ -88,37 +91,11 @@ export function createGameAudio(opts?: GameAudioOptions): GameAudio {
 }
 
 /**
- * Bind the HUD's sound controls to the audio buses: the **Music slider → music bus**,
- * the **Effects slider → sfx bus** (persisted to localStorage + restored), and the
- * **Sound toggle → mute** (all buses). Returns a disposer. Zero wiring in the game.
+ * Bind the HUD's sound controls to the audio buses (Music slider → music, Effects → sfx,
+ * persisted; Sound toggle → mute). Returns a disposer. `createStakeGame` calls this for you
+ * (via {@link bindMixerToHud}) when you pass `audio`; use it directly only to opt out or
+ * wire a mixer the core didn't get.
  */
 export function bindAudioToHud(audio: GameAudio, hud: BootedHud, opts: { storageKey?: string } = {}): () => void {
-  const key = opts.storageKey ?? 'stakeplate.mixer';
-  const namedBuses = ['music', 'sfx', 'ambience'];
-  const save = (): void => {
-    try {
-      localStorage.setItem(key, JSON.stringify({ music: audio.bus('music').level, sfx: audio.bus('sfx').level }));
-    } catch {
-      /* storage may be unavailable */
-    }
-  };
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, number>;
-    for (const [b, v] of Object.entries(saved)) if (typeof v === 'number') audio.bus(b).level = v;
-  } catch {
-    /* ignore */
-  }
-
-  const disposers: Array<() => void> = [];
-  disposers.push(
-    hud.on('valueChanged', (p) => {
-      const v = p as { id?: string; value?: number };
-      if (v?.id === 'music' && typeof v.value === 'number') { audio.bus('music').level = v.value; save(); }
-      if (v?.id === 'sfx' && typeof v.value === 'number') { audio.bus('sfx').level = v.value; save(); }
-    }),
-  );
-  // Sound toggle → mute every named bus.
-  const muted = hud.ui.muted;
-  disposers.push(muted.subscribe((m: boolean) => { for (const b of namedBuses) audio.bus(b).muted = m; }));
-  return () => { for (const d of disposers.splice(0)) d(); };
+  return bindMixerToHud(audio, hud, opts);
 }
