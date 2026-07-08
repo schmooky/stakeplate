@@ -252,7 +252,102 @@ interface PhaseContext<T, V> {
 
 ---
 
-## 9. Тестирование без бэкенда
+## 9. Ассеты (pixi)
+
+Ядро **не грузит ассеты игры** — оно владеет только HUD, boot-сплэшем и `showBootError`.
+Текстуры, атласы, spine грузит **ваша сцена** в `mountView` через pixi `Assets` (сцена —
+единственный рендер, который пишет игра).
+
+```ts
+import { Assets } from 'pixi.js';
+import atlasUrl from './assets/symbols.json'; // импорт → бандлер подставит хэш + относит. URL
+
+class MyScene {
+  private ready: Promise<void>;
+  constructor(host: HTMLElement, ctx: ViewContext) { this.ready = this.init(host); }
+
+  private async init(host: HTMLElement): Promise<void> {
+    await this.app.init({ backgroundAlpha: 0 /* … */ });
+    host.appendChild(this.app.canvas);
+    const sheet = await Assets.load(atlasUrl); // грузим атлас/спрайтшит/spine
+    this.build(sheet);
+  }
+
+  async play(round): Promise<void> { await this.ready; /* … анимируем раунд … */ }
+}
+```
+
+- **Boot-сплэш.** Ваш `#boot` div прячется, когда `game.start()` зарезолвится (auth + монтаж
+  HUD). Сцена грузит ассеты параллельно — держите `ready`-промис и `await this.ready` в начале
+  `play()`, тогда первый спин дождётся ассетов. Ошибка загрузки → бросьте из `mountView`, ядро
+  покажет блокирующий `showBootError`.
+- **Сборка под Stake (единый бандл, относительные пути).** Stake раздаёт игру с глубокого CDN-
+  подпути, поэтому: `vite build` с `base: './'`; **импортируйте** ассеты (`import url from
+  './x.png'`), не хардкодьте абсолютные пути; крупную бинарку (spine `.skel`/атласы) кладите в
+  бандл, мелочь можно инлайнить (data-URI) ради одного самодостаточного файла.
+
+---
+
+## 10. Звук — `@stakeplate/core/audio`
+
+Тонкая обёртка над `@schmooky/zvuk`: стандартный граф шин (master → `music` / `sfx` /
+`ambience`), привязка к слайдерам HUD и дакинг музыки под sfx. Игра только объявляет звуки.
+
+```ts
+import { createGameAudio, bindAudioToHud } from '@stakeplate/core/audio';
+import spinUrl from './sfx/spin.mp3';
+import winUrl from './sfx/win.mp3';
+import baseLoop from './music/base.mp3';
+
+const audio = createGameAudio({ buses: { music: 0.8, sfx: 1 } }); // + дакинг music ← sfx
+
+const game = createStakeGame<Data, View, Ev>({
+  // …config, interpretBook, mountView…
+  audio,                                    // фазы зовут ctx.audio.play('win') / music('base')
+  mountView: (host, ctx) => {
+    bindAudioToHud(audio, ctx.hud);          // Music/Effects слайдеры + mute (persist в localStorage)
+    const off = ctx.hud.on('spinRequested', () => { void audio.unlock(); off(); }); // разблок на 1-м жесте
+    void audio.load([                        // preload манифеста на шины
+      { name: 'spin', url: spinUrl },                // → шина sfx по умолчанию
+      { name: 'win',  url: winUrl, bus: 'sfx' },
+      { name: 'base', kind: 'music', loop: baseLoop }, // + intro? / outro?
+    ]);
+    return new MyScene(host, ctx);
+  },
+});
+```
+
+Из фаз (или сцены):
+
+```ts
+ctx.audio?.play('win');                    // на шину sfx; музыка сама «пригибается» (дакинг)
+ctx.audio?.music('base', { fadeIn: 0.4 }); // сменяет текущий трек с кроссфейдом
+ctx.audio?.stopMusic({ fade: 0.3 });
+```
+
+| API | Что делает |
+|---|---|
+| `createGameAudio({ buses?, masterHeadroom?, duckMusicFrom?, duckAmount? })` | поднять микшер (шины + limiter + дакинг) |
+| `audio.load(entries)` | preload звуков/музыки на шины |
+| `audio.play(name, { bus?, volume? })` | сыграть звук (по умолчанию `sfx`) |
+| `audio.music(name, { fadeIn? })` · `stopMusic({ fade? })` | музыка (кроссфейд текущей) |
+| `audio.unlock()` | resume AudioContext с жеста (1 раз) + армирует дакинг |
+| `audio.bus(name)` | шина zvuk (`.level` 0..1, `.muted`, `fadeTo`, FX-вставки) |
+| `bindAudioToHud(audio, hud, { storageKey? })` | Music→music, Effects→sfx (persist), Sound-toggle→mute всех шин; возвращает disposer |
+
+- **Шины по умолчанию:** master → `music` (0.8) / `sfx` (1) / `ambience` (0.6); master headroom
+  −3 dB + limiter. Свои уровни — в `createGameAudio({ buses })`.
+- **Дакинг:** `music` пригибается, пока звучит `sfx` (`duckMusicFrom: 'sfx'`, `duckAmount` 0.5);
+  `duckMusicFrom: null` — выключить.
+- **Разблокировка обязательна** с пользовательского жеста (браузер не играет звук до этого) —
+  поэтому `audio.unlock()` на первом спине.
+
+> `@stakeplate/core/audio` — отдельный подпакет: если звук не нужен, вы его не импортируете и
+> `@schmooky/zvuk` в бандл не попадает.
+
+---
+
+## 11. Тестирование без бэкенда
 
 `@stakeplate/core/testing` + `/rgs`:
 
@@ -271,7 +366,7 @@ net.forceRound({ payoutMultiplier: 500, events: [{ grid: winningGrid }] }); // 5
 
 ---
 
-## 10. Граница ответственности
+## 12. Граница ответственности
 
 **Ваше (внутри игры):** сцена и барабаны, презентер, фаза `Present`, `interpretBook`,
 `config`, тексты правил, звуки, математика (на этапе сборки).
@@ -292,7 +387,7 @@ HUD, набор иконок HUD по умолчанию, цикл раунда.
 
 ---
 
-## 11. TL;DR
+## 13. TL;DR
 
 ```
 Дайте: config + interpretBook + mountView + Present-фазу.
