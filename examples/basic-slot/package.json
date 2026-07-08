@@ -1,0 +1,23 @@
+{
+  "name": "basic-slot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The @stakeplate/core usage example — a minimal slot built with createStakeGame, booting on the bundled mock RGS (no backend).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stakeplate/core": "workspace:*",
+    "@open-slot-ui/core": "^0.7.1",
+    "@open-slot-ui/pixi": "^0.7.1",
+    "mobx": "^6.13.0",
+    "pixi.js": "^8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "rgs-emulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Stake RGS emulator — serves the math-sdk's generated books over Stake's /wallet/* API.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucky-magnet/stake-protocol": "workspace:*",
+    "fzstd": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

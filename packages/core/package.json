@@ -1,0 +1,116 @@
+{
+  "name": "@stakeplate/core",
+  "version": "0.0.0",
+  "description": "Batteries-included Stake Engine game core — RGS transport, boot, round FSM, HUD binding, audio, i18n and a compliant rules builder. Bring a scene, a Present phase and a pure interpretBook; the core does the rest.",
+  "keywords": [
+    "stake",
+    "stake-engine",
+    "slot",
+    "slots",
+    "igaming",
+    "rgs",
+    "pixijs",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "schmooky and the stakeplate contributors",
+  "homepage": "https://github.com/schmooky/stakeplate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schmooky/stakeplate.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/schmooky/stakeplate/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "source": "./src/index.ts",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./rgs": {
+      "source": "./src/rgs/index.ts",
+      "types": "./dist/rgs.d.ts",
+      "import": "./dist/rgs.js",
+      "default": "./dist/rgs.js"
+    },
+    "./stores": {
+      "source": "./src/stores/index.ts",
+      "types": "./dist/stores.d.ts",
+      "import": "./dist/stores.js",
+      "default": "./dist/stores.js"
+    },
+    "./audio": {
+      "source": "./src/audio/index.ts",
+      "types": "./dist/audio.d.ts",
+      "import": "./dist/audio.js",
+      "default": "./dist/audio.js"
+    },
+    "./testing": {
+      "source": "./src/testing/index.ts",
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@open-slot-ui/core": ">=0.7",
+    "@open-slot-ui/pixi": ">=0.7",
+    "@schmooky/zvuk": ">=1.13",
+    "pixi-reels": "*",
+    "pixi.js": "^8"
+  },
+  "peerDependenciesMeta": {
+    "@open-slot-ui/core": {
+      "optional": true
+    },
+    "@open-slot-ui/pixi": {
+      "optional": true
+    },
+    "@schmooky/zvuk": {
+      "optional": true
+    },
+    "pixi-reels": {
+      "optional": true
+    },
+    "pixi.js": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "mobx": "^6.13.0"
+  },
+  "devDependencies": {
+    "@open-slot-ui/core": "^0.7.1",
+    "@open-slot-ui/pixi": "^0.7.1",
+    "@schmooky/zvuk": "^1.13.0",
+    "pixi.js": "^8",
+    "tsdown": "^0.22.4",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}

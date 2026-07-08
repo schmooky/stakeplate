@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stakeplate",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "game", "dev"],
+      "port": 5173
+    }
+  ]
+}

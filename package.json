@@ -1,0 +1,21 @@
+{
+  "name": "stakeplate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stake Engine slot built on slotplate architecture: pixi-reels reels, open-ui HUD, Stake networking, local RGS emulator. First game: the Lucky-Magnet digits & magnet design.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n rgs,game -c magenta,cyan \"pnpm --filter rgs-emulator dev\" \"pnpm --filter game dev\"",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "game:dev": "pnpm --filter game dev",
+    "game:build": "pnpm --filter game build",
+    "rgs:dev": "pnpm --filter rgs-emulator dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

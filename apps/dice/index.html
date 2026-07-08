@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0a0a16" />
+    <title>PS1 Dice</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; background: #0a0a16; overflow: hidden;
+        overscroll-behavior: none; touch-action: none; -webkit-tap-highlight-color: transparent;
+        font-family: system-ui, sans-serif; color: #e7e7f0; }
+      body { position: fixed; inset: 0; }
+      /* three.js dice table (back) */
+      #scene { position: absolute; inset: 0; z-index: 1; }
+      #scene canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
+      /* pixi HUD overlay (front) */
+      #hud { position: absolute; inset: 0; z-index: 2; }
+      /* gentle, NON-corrupting retro overlays */
+      #scanlines { position: fixed; inset: 0; z-index: 3; pointer-events: none;
+        background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px); }
+      #vignette { position: fixed; inset: 0; z-index: 3; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,0.4) 100%); }
+      #boot { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center;
+        background: #0a0a16; color: #8a86c0; letter-spacing: 2px; font-size: 12px;
+        transition: opacity .4s ease; }
+      #boot[data-done="1"] { opacity: 0; pointer-events: none; }
+      /* cascade tally badges (top-centre) */
+      #tally { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 4;
+        display: flex; gap: 10px; pointer-events: none; font-family: system-ui, sans-serif; }
+      .badge { background: rgba(22,26,34,.82); border: 1px solid #2a3140; border-radius: 10px;
+        padding: 8px 14px; backdrop-filter: blur(6px); text-align: center; }
+      .badge .k { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: #8a92a3; }
+      .badge .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; color: #ece9e0; }
+      .badge.win .v { color: #5fb87a; } .badge.mult .v { color: #e6b34a; }
+      /* round payout flash (centre) */
+      #flash { position: fixed; left: 50%; top: 40%; transform: translate(-50%,-50%) scale(.8); z-index: 5;
+        background: rgba(22,26,34,.94); border: 1px solid #7c6cf0; border-radius: 16px;
+        padding: 20px 34px; text-align: center; opacity: 0; transition: .35s; pointer-events: none;
+        font-family: system-ui, sans-serif; }
+      #flash.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      #flash .k { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a92a3; }
+      #flash .v { font-size: 46px; font-weight: 800; color: #5fb87a; font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body>
+    <div id="scene"></div>
+    <div id="hud"></div>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="tally">
+      <div class="badge"><div class="k">Dice</div><div class="v" id="tDice">0</div></div>
+      <div class="badge win"><div class="k">Win</div><div class="v" id="tWin">0</div></div>
+      <div class="badge mult"><div class="k">Mult</div><div class="v" id="tMult">×1</div></div>
+    </div>
+    <div id="flash"><div class="k">Round payout</div><div class="v" id="fVal">0×</div></div>
+    <div id="boot">LOADING…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
