@@ -7,10 +7,12 @@ import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { MiniSlot } from './MiniSlot';
 import { DemoNetwork } from './demoNetwork';
 
+/** This game's book-event type — declared once, so `interpretBook`'s `raw` is TYPED. */
+type Ev = { grid: string[][] };
 type Data = { grid: string[][]; win: boolean };
 
 /** The game's Present phase — play the round back on the scene, then settle. */
-const present: Phase<Data, MiniSlot> = {
+const present: Phase<Data, MiniSlot, Ev> = {
   name: 'present',
   async enter(ctx) {
     const r = ctx.round;
@@ -19,17 +21,17 @@ const present: Phase<Data, MiniSlot> = {
   },
 };
 
-const game = createStakeGame<Data, MiniSlot>({
+const game = createStakeGame<Data, MiniSlot, Ev>({
+  // The bet ladder, default bet and buy-confirm policy come from the RGS/jurisdiction (here
+  // the mock's `authenticate`), NOT from game config. `rtp` is display-only fallback.
   config: {
     title: 'Basic Slot',
-    bets: [0.2, 0.5, 1, 2, 5, 10],
-    defaultBet: 1,
     rtp: 96,
-    confirmBuyAboveCost: 2,
   },
-  // The one money seam: parse the book's grid; the win/multiplier are the engine's.
+  // The one money seam: parse the book's grid. `raw` is `Round<Ev>` → `roundEvents(raw)` is
+  // `Ev[]`, no cast. The win/multiplier are the engine's (server-authoritative).
   interpretBook: (raw, info): Data => {
-    const ev = roundEvents(raw)[0] as { grid?: string[][] } | undefined;
+    const ev = roundEvents(raw)[0];
     return { grid: ev?.grid ?? [[], [], []], win: info.totalWin > 0 };
   },
   mountView: (host) => {
@@ -38,7 +40,8 @@ const game = createStakeGame<Data, MiniSlot>({
     return scene;
   },
   phases: [present],
-  network: new DemoNetwork({ balance: 1000, currency: 'USD', modes: { base: 1 } }),
+  // The mock RGS owns the ladder (like a real `authenticate` would), per currency.
+  network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1 } }),
   hudHost: document.getElementById('hud')!,
   sceneHost: document.getElementById('scene')!,
 });

@@ -18,8 +18,9 @@ export interface AudioPort {
   stopMusic(opts?: { fade?: number }): void;
 }
 
-/** Handed to every phase. `round` is set by SpinPhase and read by Present/Settle. */
-export interface PhaseContext<T = unknown, V = unknown> {
+/** Handed to every phase. `round` is set by SpinPhase and read by Present/Settle. `E` is
+ *  the game's book-event type, so `interpretBook`/`round.raw` are typed. */
+export interface PhaseContext<T = unknown, V = unknown, E = unknown> {
   readonly config: GameConfig;
   readonly stores: RootStore;
   readonly network: NetworkManager;
@@ -28,30 +29,30 @@ export interface PhaseContext<T = unknown, V = unknown> {
   /** The game's mounted view (scene/presenter/stores) — whatever `mountView` returned. */
   readonly view: V;
   readonly audio: AudioPort | null;
-  readonly interpretBook: InterpretBook<T>;
-  readonly fsm: FSM<T, V>;
-  round: GameRound<T> | null;
+  readonly interpretBook: InterpretBook<T, E>;
+  readonly fsm: FSM<T, V, E>;
+  round: GameRound<T, E> | null;
   /** Cost multiplier for a mode key (from `config.modes`, default 1). */
   modeCost(mode: string): number;
 }
 
-export interface Phase<T = unknown, V = unknown> {
+export interface Phase<T = unknown, V = unknown, E = unknown> {
   readonly name: string;
-  enter(ctx: PhaseContext<T, V>): Promise<void> | void;
-  exit?(ctx: PhaseContext<T, V>): void;
+  enter(ctx: PhaseContext<T, V, E>): Promise<void> | void;
+  exit?(ctx: PhaseContext<T, V, E>): void;
 }
 
-export class FSM<T = unknown, V = unknown> {
-  private ctx: PhaseContext<T, V> | null = null;
-  private readonly byName = new Map<string, Phase<T, V>>();
+export class FSM<T = unknown, V = unknown, E = unknown> {
+  private ctx: PhaseContext<T, V, E> | null = null;
+  private readonly byName = new Map<string, Phase<T, V, E>>();
   private _current = '';
 
   /** Later phases with the same `name` win — so a game's Present overrides the default. */
-  constructor(phases: Phase<T, V>[]) {
+  constructor(phases: Phase<T, V, E>[]) {
     for (const p of phases) this.byName.set(p.name, p);
   }
 
-  bind(ctx: PhaseContext<T, V>): void {
+  bind(ctx: PhaseContext<T, V, E>): void {
     this.ctx = ctx;
   }
 

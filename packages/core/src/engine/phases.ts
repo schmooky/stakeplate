@@ -3,22 +3,22 @@
 // stores (createStakeGame reacts store→HUD); the phases call the HUD directly only for
 // reportRound + errors.
 
-import { API_AMOUNT_MULTIPLIER } from '../rgs/protocol';
+import { API_AMOUNT_MULTIPLIER, type Round } from '../rgs/protocol';
 import { roundInfo } from './round';
 import type { Phase, PhaseContext } from './fsm';
 
 /** Wait for the next spin (the HUD's `spinRequested` drives the transition to Spin). */
-export class IdlePhase<T = unknown, V = unknown> implements Phase<T, V> {
+export class IdlePhase<T = unknown, V = unknown, E = unknown> implements Phase<T, V, E> {
   readonly name = 'idle';
-  enter(ctx: PhaseContext<T, V>): void {
+  enter(ctx: PhaseContext<T, V, E>): void {
     ctx.stores.ui.setSpinning(false);
   }
 }
 
 /** Pick the mode, take the stake, ask the RGS, parse the round, hand off to Present. */
-export class SpinPhase<T = unknown, V = unknown> implements Phase<T, V> {
+export class SpinPhase<T = unknown, V = unknown, E = unknown> implements Phase<T, V, E> {
   readonly name = 'spin';
-  async enter(ctx: PhaseContext<T, V>): Promise<void> {
+  async enter(ctx: PhaseContext<T, V, E>): Promise<void> {
     const { stores, network, hud } = ctx;
     const mode = stores.ui.nextMode();
     const cost = ctx.modeCost(mode);
@@ -30,16 +30,19 @@ export class SpinPhase<T = unknown, V = unknown> implements Phase<T, V> {
 
     try {
       const play = await network.play({ bet, mode });
+      // The transport is game-agnostic (events: unknown); the game declared `E`, so we
+      // narrow here — the game owns the shape it parses in `interpretBook`.
+      const raw = play.round as Round<E>;
       let settledApi = play.balance.amount;
-      if (play.round.active) settledApi = (await network.endRound()).balance.amount;
-      const info = roundInfo(play.round, bet, cost);
-      const data = ctx.interpretBook(play.round, info);
+      if (raw.active) settledApi = (await network.endRound()).balance.amount;
+      const info = roundInfo(raw, bet, cost);
+      const data = ctx.interpretBook(raw, info);
       ctx.round = {
         ...info,
         data,
-        active: play.round.active ?? false,
+        active: raw.active ?? false,
         balance: settledApi / API_AMOUNT_MULTIPLIER,
-        raw: play.round,
+        raw,
       };
     } catch (err) {
       stores.balance.refund(stake); // the round never happened
@@ -57,19 +60,19 @@ export class SpinPhase<T = unknown, V = unknown> implements Phase<T, V> {
 }
 
 /** DEFAULT Present — nothing to animate. The game overrides `present` to play its scene. */
-export class PresentPhase<T = unknown, V = unknown> implements Phase<T, V> {
+export class PresentPhase<T = unknown, V = unknown, E = unknown> implements Phase<T, V, E> {
   readonly name = 'present';
-  async enter(ctx: PhaseContext<T, V>): Promise<void> {
+  async enter(ctx: PhaseContext<T, V, E>): Promise<void> {
     await ctx.fsm.transition('settle');
   }
 }
 
 /** Apply the authoritative balance + win, settle the round for the HUD, then Idle. */
-export class SettlePhase<T = unknown, V = unknown> implements Phase<T, V> {
+export class SettlePhase<T = unknown, V = unknown, E = unknown> implements Phase<T, V, E> {
   readonly name = 'settle';
   private roundStartedAt = 0;
 
-  async enter(ctx: PhaseContext<T, V>): Promise<void> {
+  async enter(ctx: PhaseContext<T, V, E>): Promise<void> {
     const r = ctx.round;
     if (r) {
       ctx.stores.balance.settle(r.balance, r.totalWin);
@@ -91,6 +94,6 @@ export class SettlePhase<T = unknown, V = unknown> implements Phase<T, V> {
 }
 
 /** The default phase set (game phases are appended after → same-name overrides win). */
-export function defaultPhases<T = unknown, V = unknown>(): Phase<T, V>[] {
-  return [new IdlePhase<T, V>(), new SpinPhase<T, V>(), new PresentPhase<T, V>(), new SettlePhase<T, V>()];
+export function defaultPhases<T = unknown, V = unknown, E = unknown>(): Phase<T, V, E>[] {
+  return [new IdlePhase<T, V, E>(), new SpinPhase<T, V, E>(), new PresentPhase<T, V, E>(), new SettlePhase<T, V, E>()];
 }

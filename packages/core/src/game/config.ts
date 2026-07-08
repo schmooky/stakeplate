@@ -11,23 +11,26 @@ export interface ModeConfig {
 export interface GameConfig {
   title: string;
   version?: string;
-  /** Bet levels in MAJOR units. */
-  bets: number[];
-  /** Default bet (major); defaults to the middle of `bets`. Overridden by the session. */
-  defaultBet?: number;
   /** Fallback currency code; the session/`?currency=` wins. */
   currency?: string;
-  /** Theoretical RTP percentage for the readout (session `rtp` wins). */
+  /**
+   * Theoretical RTP percentage — DISPLAY ONLY (the RTP readout + rules). NOT authoritative:
+   * the server (`auth.config.rtp`) wins, and the certified math report is the source of
+   * truth. This is only a last-resort fallback; prefer never hand-typing it (drift risk).
+   */
   rtp?: number;
   /** Mode key → cost multiplier (a number) or a `ModeConfig`. `base` defaults to 1. */
   modes?: Record<string, ModeConfig | number>;
   /** Rules blocks for the HUD menu (`@open-slot-ui` `BlockSpec[]` / `MenuSpec`) — opaque here. */
   rules?: unknown;
-  /** Confirm buys/activations costing MORE than this (× base bet). Stake requires 2. */
-  confirmBuyAboveCost?: number;
   /** Extra `@open-slot-ui` `UISpec` fields merged into the built spec (escape hatch). */
   spec?: Record<string, unknown>;
 }
+
+// NOTE (server-authoritative): the bet ladder (`betLevels` + `defaultBetLevel`) and the
+// buy-feature confirm threshold are NOT game config — the RGS `authenticate` response owns
+// the ladder (per currency/jurisdiction) and the jurisdiction owns the confirm policy. The
+// core reads them from `auth.config`; a game only declares that a mode is a buy (`modes`).
 
 /** The cost multiplier for a mode key (default 1 for `base` / unknown modes). */
 export function modeCostOf(config: GameConfig, mode: string): number {

@@ -58,10 +58,11 @@ import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { MiniSlot } from './MiniSlot';       // ваша pixi-сцена
 import { DemoNetwork } from './demoNetwork';  // в проде — не нужен, ядро само идёт в RGS
 
+type Ev = { grid: string[][] };              // тип событий book — объявляется ОДИН раз
 type Data = { grid: string[][]; win: boolean };
 
 // Ваша фаза Present: проиграть раунд на сцене, затем передать в settle.
-const present: Phase<Data, MiniSlot> = {
+const present: Phase<Data, MiniSlot, Ev> = {
   name: 'present',
   async enter(ctx) {
     if (ctx.round) await ctx.view.play(ctx.round.data.grid, ctx.round.data.win);
@@ -69,17 +70,17 @@ const present: Phase<Data, MiniSlot> = {
   },
 };
 
-const game = createStakeGame<Data, MiniSlot>({
+const game = createStakeGame<Data, MiniSlot, Ev>({
+  // Лестница ставок, ставка по умолчанию и порог подтверждения покупки приходят от RGS/
+  // юрисдикции (здесь — из `authenticate` мока), НЕ из конфига. `rtp` — только для показа.
   config: {
     title: 'Basic Slot',
-    bets: [0.2, 0.5, 1, 2, 5, 10],
-    defaultBet: 1,
     rtp: 96,
-    confirmBuyAboveCost: 2,
   },
-  // Единственный «денежный шов»: распарсить book → вашу модель. Чистая функция.
+  // Единственный «денежный шов». `raw` типизирован как `Round<Ev>` → `roundEvents(raw)`
+  // это `Ev[]`, без cast. Выигрыш/множитель считает ядро (серверо-авторитетно).
   interpretBook: (raw, info): Data => {
-    const ev = roundEvents(raw)[0] as { grid?: string[][] } | undefined;
+    const ev = roundEvents(raw)[0];
     return { grid: ev?.grid ?? [[], [], []], win: info.totalWin > 0 };
   },
   mountView: (host) => new MiniSlot(host),
@@ -101,41 +102,51 @@ await game.start();
 
 ### 4.1. `config: GameConfig`
 
-Декларативное описание игры. Ядро строит из него UISpec для HUD.
+Декларативное описание игры. Ядро строит из него UISpec для HUD. Обратите внимание, чего
+здесь **нет**: лестницы ставок, ставки по умолчанию и порога подтверждения покупки — всё это
+серверо-авторитетно (см. §5) и приходит из `authenticate`/юрисдикции, а не из конфига.
 
 ```ts
 interface GameConfig {
   title: string;
   version?: string;
-  bets: number[];                 // лестница ставок (мажорные единицы: 1 = 1.00)
-  defaultBet?: number;
-  currency?: string;
-  rtp?: number;                   // показывается в правилах/HUD
-  modes?: Record<string, ModeConfig>;   // base, bonus, … с их cost-множителями
+  currency?: string;              // фолбэк; сессия/`?currency=` побеждает
+  rtp?: number;                   // ТОЛЬКО показ (readout/правила); сервер/report — истина
+  modes?: Record<string, ModeConfig | number>; // base, bonus, … с их cost-множителями
   rules?: unknown;                // содержимое меню/правил (compliance)
-  confirmBuyAboveCost?: number;   // Stake: подтверждать buy-feature дороже N× ставки
   spec?: Record<string, unknown>; // сырой проброс в mountHud (крайние случаи)
 }
 ```
 
-### 4.2. `interpretBook: (raw, info) => T` — единственный «денежный шов»
+> Лестница ставок (`betLevels`), ставка по умолчанию (`defaultBetLevel`) и порог
+> `confirmBuyAboveCost` берутся из `auth.config` / юрисдикции. Игра лишь объявляет, что режим
+> — покупка (`modes.bonus.buy = true`); порог подтверждения — политика Stake, не выбор игры.
+
+### 4.2. `interpretBook: (raw: Round<E>, info) => T` — единственный «денежный шов»
 
 Чистая функция «сырой book из RGS → ваша модель раунда». **Парсит только события**
-(символы, каскады, бонус). Деньги считает ядро, не вы:
+(символы, каскады, бонус). `raw` типизирован вашим типом события `E` (объявляется на
+`createStakeGame<Data, View, E>`), поэтому вы видите **реальные данные сервера типизированно**,
+а не `unknown`. Деньги считает ядро:
 
 ```ts
 interface RoundInfo {
   mode: string;
-  bet: number;
+  bet: number;          // базовая ставка
   cost: number;         // множитель стоимости режима
   stake: number;        // bet × cost
   multiplier: number;   // payoutMultiplier / 100
-  totalWin: number;     // multiplier × bet
+  totalWin: number;     // производный: multiplier × bet
+  payout: number;       // АВТОРИТЕТНЫЙ выигрыш сервера (raw.payout); фолбэк — totalWin
 }
+
+type InterpretBook<T, E> = (raw: Round<E>, info: RoundInfo) => T;
 ```
 
-Правило: клиент «тупой» и серверо-авторитетный. Никакого paytable/evaluateWin/RTP на
-клиенте — только разбор того, что уже прислал сервер.
+Полный ответ сервера доступен в `raw` (`betID`, `amount`, `payout`, `payoutMultiplier`,
+события через `roundEvents(raw): E[]`, `active`). Правило: клиент «тупой» и серверо-
+авторитетный — никакого paytable/evaluateWin/RTP на клиенте, только разбор присланного.
+Когда `payout` и `totalWin` расходятся — доверяйте `payout` (это сумма сервера).
 
 ### 4.3. `mountView: (host, ctx) => V`
 

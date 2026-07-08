@@ -10,7 +10,7 @@ import { modeCostOf, type GameConfig } from '../src/game/config';
 type Data = { won: number };
 
 function makeGame(net: NetworkManager, balance = 100): { stores: RootStore; hud: RecordingHud; fsm: FSM<Data, null> } {
-  const config: GameConfig = { title: 'T', bets: [1], modes: { base: 1, bonus: 185 } };
+  const config: GameConfig = { title: 'T', modes: { base: 1, bonus: 185 } };
   const stores = new RootStore();
   stores.balance.setBet(1);
   stores.balance.setBalance(balance);

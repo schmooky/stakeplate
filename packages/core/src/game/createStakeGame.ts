@@ -12,7 +12,7 @@ import { resolveCurrency, isSocialCurrency } from '@open-slot-ui/core';
 import { reaction } from 'mobx';
 import { readRuntime, type RuntimeConfig } from '../rgs/runtime';
 import { createNetwork, type NetworkManager } from '../rgs/network';
-import { API_AMOUNT_MULTIPLIER } from '../rgs/protocol';
+import { API_AMOUNT_MULTIPLIER, type Round } from '../rgs/protocol';
 import { RootStore } from '../stores/index';
 import { RealTicker, type Ticker } from '../engine/ticker';
 import { FSM, type AudioPort, type Phase, type PhaseContext } from '../engine/fsm';
@@ -29,14 +29,14 @@ export interface ViewContext {
   audio: AudioPort | null;
 }
 
-export interface CreateStakeGameOptions<T = unknown, V = unknown> {
+export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
   config: GameConfig;
-  /** The game's ONE money seam: raw RGS round → your model. Pure. */
-  interpretBook: InterpretBook<T>;
+  /** The game's ONE money seam: typed RGS round (`Round<E>`) → your model. Pure. */
+  interpretBook: InterpretBook<T, E>;
   /** Mount the game's pixi scene/presenter/stores; returns the view handed to phases. */
   mountView: (host: HTMLElement, ctx: ViewContext) => V;
   /** The game's Present phase (+ any overrides); Idle/Spin/Settle are provided. */
-  phases?: Phase<T, V>[];
+  phases?: Phase<T, V, E>[];
   audio?: AudioPort | null;
   /** Override the transport (tests / a supplied mock). */
   network?: NetworkManager;
@@ -48,6 +48,23 @@ export interface CreateStakeGameOptions<T = unknown, V = unknown> {
   sceneHost?: HTMLElement;
   /** Passthrough to `mountHud` (spinSkin, icons, gsap, menu:false, hooks, …). */
   hudOptions?: Record<string, unknown>;
+}
+
+/**
+ * Stake policy: buys/activations costing more than this many × base bet require a confirm
+ * (no one-click). A buy-feature always costs far more than 2×, so in practice this means
+ * "always confirm a buy". The jurisdiction (`auth.config.jurisdiction`) may override it; a
+ * game never sets it — it's compliance, not design.
+ */
+const STAKE_CONFIRM_ABOVE_COST = 2;
+
+/** Server/replay-sourced values that drive the HUD spec — never taken from the game config. */
+interface HudSpecInput {
+  currency: string;
+  betLevels: number[]; // major units — the authoritative ladder
+  defaultBet: number; // major units
+  rtp: number; // display %
+  confirmBuyAboveCost: number; // jurisdiction policy
 }
 
 /** A read-only snapshot of the running game — for the dev harness, tests and debugging. */
@@ -69,7 +86,7 @@ export interface StakeGame {
   requestSpin(): boolean;
 }
 
-export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameOptions<T, V>): StakeGame {
+export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: CreateStakeGameOptions<T, V, E>): StakeGame {
   const runtime = readRuntime({ overrides: opts.runtime });
   const network = opts.network ?? createNetwork(runtime);
   const stores = new RootStore();
@@ -78,7 +95,7 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
   const app = new Application();
   const disposers: Array<() => void> = [];
   let hud: BootedHud | null = null;
-  let fsm: FSM<T, V> | null = null;
+  let fsm: FSM<T, V, E> | null = null;
 
   // The battery wires the library's DESIGNED default icon set (the white Figma coins +
   // rotating-arrows spin skin) so every game gets the intended HUD out of the box — not
@@ -96,22 +113,21 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
     };
   };
 
-  const buildSpec = (currency: string): Record<string, unknown> => {
-    const bets = opts.config.bets;
-    const defaultBet = opts.config.defaultBet ?? bets[Math.floor(bets.length / 2)] ?? bets[0] ?? 1;
-    return {
-      currency: resolveCurrency(currency),
-      betLadder: { levels: bets, index: Math.max(0, bets.indexOf(defaultBet)) },
-      ...(opts.config.rtp != null ? { rtp: opts.config.rtp } : {}),
-      game: { name: opts.config.title, version: opts.config.version ?? '1.0.0' },
-      // Stake owns fullscreen in its iframe — the game must not render its own.
-      controls: { fullscreen: { hidden: true } },
-      ...(opts.config.confirmBuyAboveCost != null ? { buyFeature: { confirmAboveCost: opts.config.confirmBuyAboveCost } } : {}),
-      ...(opts.config.rules ? { menu: opts.config.rules } : {}),
-      locale: { locale: runtime.language, messages: { en: {} } },
-      ...(opts.config.spec ?? {}),
-    };
-  };
+  // The HUD spec is driven by SERVER-authoritative values (the ladder + confirm policy come
+  // from `authenticate`/jurisdiction, not the game). `buildSpec` just formats them.
+  const buildSpec = (s: HudSpecInput): Record<string, unknown> => ({
+    currency: resolveCurrency(s.currency),
+    betLadder: { levels: s.betLevels, index: Math.max(0, s.betLevels.indexOf(s.defaultBet)) },
+    rtp: s.rtp,
+    game: { name: opts.config.title, version: opts.config.version ?? '1.0.0' },
+    // Stake owns fullscreen in its iframe — the game must not render its own.
+    controls: { fullscreen: { hidden: true } },
+    // Compliance: the buy-feature confirm threshold is jurisdiction policy, not a game knob.
+    buyFeature: { confirmAboveCost: s.confirmBuyAboveCost },
+    ...(opts.config.rules ? { menu: opts.config.rules } : {}),
+    locale: { locale: runtime.language, messages: { en: {} } },
+    ...(opts.config.spec ?? {}),
+  });
 
   const initApp = async (host: HTMLElement): Promise<void> => {
     await app.init({ resizeTo: window, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio || 1, 2), autoDensity: true });
@@ -121,16 +137,16 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
   async function start(): Promise<void> {
     const hudHost = opts.hudHost ?? document.body;
     const sceneHost = opts.sceneHost ?? hudHost;
-    const phases = [...defaultPhases<T, V>(), ...(opts.phases ?? [])];
-    const machine = (fsm = new FSM<T, V>(phases)); // outer `fsm` powers inspect()/requestSpin()
+    const phases = [...defaultPhases<T, V, E>(), ...(opts.phases ?? [])];
+    const machine = (fsm = new FSM<T, V, E>(phases)); // outer `fsm` powers inspect()/requestSpin()
 
     // ── REPLAY (Stake ?replay=true): fetch a round + play it back read-only ──────
     if (runtime.replay.active && network.replay) {
       try {
         await initApp(hudHost);
         const cur = runtime.currency;
-        const bet = runtime.replay.amount || opts.config.defaultBet || opts.config.bets[0] || 1;
-        hud = mountHud(app, buildSpec(cur), (await hudOpts()) as never);
+        const bet = runtime.replay.amount || 1; // replay carries its own bet; no ladder needed
+        hud = mountHud(app, buildSpec({ currency: cur, betLevels: [bet], defaultBet: bet, rtp: opts.config.rtp ?? 96, confirmBuyAboveCost: STAKE_CONFIRM_ABOVE_COST }), (await hudOpts()) as never);
         stores.session.set({ currency: cur });
         stores.balance.setBalance(0);
         stores.balance.setBet(bet);
@@ -139,7 +155,7 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
         hud.setReplay(true);
         hud.lockInput();
         const cost = modeCostOf(opts.config, runtime.replay.mode);
-        const raw = await network.replay({ ...runtime.replay });
+        const raw = (await network.replay({ ...runtime.replay })) as Round<E>;
         const info = roundInfo(raw, bet, cost);
         const ctx = makeCtx(machine, view);
         ctx.round = { ...info, data: opts.interpretBook(raw, info), active: false, balance: 0, raw };
@@ -170,24 +186,30 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
       return;
     }
 
+    // Everything the HUD needs is SERVER-authoritative (from `authenticate`): the bet
+    // ladder + default bet (per currency/jurisdiction), RTP, and the buy-confirm policy.
     const currency = auth.balance.currency;
+    const juris = auth.config.jurisdiction ?? {};
     const rtp = auth.config.rtp ?? opts.config.rtp ?? 96;
-    hud = mountHud(app, buildSpec(currency), (await hudOpts()) as never);
-    hud.setCurrency(resolveCurrency(currency));
-    hud.applyJurisdiction(auth.config.jurisdiction ?? {});
-    if (runtime.social || isSocialCurrency(currency)) hud.setSocial(true);
-
+    const betLevels = auth.config.betLevels.map((b) => b / API_AMOUNT_MULTIPLIER);
     const active = auth.round;
     const activeCost = active?.active ? modeCostOf(opts.config, active.mode) : 1;
     const defaultBet = active?.active
       ? active.amount / API_AMOUNT_MULTIPLIER / activeCost // resume: restore bet from the active amount
       : auth.config.defaultBetLevel / API_AMOUNT_MULTIPLIER;
+    const confirmBuyAboveCost = juris.confirmBuyAboveCost ?? STAKE_CONFIRM_ABOVE_COST;
+
+    hud = mountHud(app, buildSpec({ currency, betLevels, defaultBet, rtp, confirmBuyAboveCost }), (await hudOpts()) as never);
+    hud.setCurrency(resolveCurrency(currency));
+    hud.applyJurisdiction(juris);
+    if (runtime.social || isSocialCurrency(currency)) hud.setSocial(true);
+
     stores.session.set({
       sessionId: runtime.sessionId,
       currency,
       rtp,
-      availableBets: auth.config.betLevels.map((b) => b / API_AMOUNT_MULTIPLIER),
-      jurisdiction: auth.config.jurisdiction ?? {},
+      availableBets: betLevels,
+      jurisdiction: juris,
     });
     stores.balance.setBet(defaultBet);
     hud.setBet(defaultBet);
@@ -203,9 +225,10 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
     // ── ACTIVE-ROUND RESUME: settle it + play it back, else idle ────────────────
     if (active?.active) {
       const end = await network.endRound();
-      const info = roundInfo(active, defaultBet, activeCost);
+      const raw = active as Round<E>;
+      const info = roundInfo(raw, defaultBet, activeCost);
       stores.balance.setBalance(end.balance.amount / API_AMOUNT_MULTIPLIER);
-      ctx.round = { ...info, data: opts.interpretBook(active, info), active: false, balance: end.balance.amount / API_AMOUNT_MULTIPLIER, raw: active };
+      ctx.round = { ...info, data: opts.interpretBook(raw, info), active: false, balance: end.balance.amount / API_AMOUNT_MULTIPLIER, raw };
       await machine.transition('present'); // view plays it back → settle → idle
     } else {
       stores.balance.setBalance(auth.balance.amount / API_AMOUNT_MULTIPLIER);
@@ -213,8 +236,8 @@ export function createStakeGame<T = unknown, V = unknown>(opts: CreateStakeGameO
     }
   }
 
-  function makeCtx(fsm: FSM<T, V>, view: V): PhaseContext<T, V> {
-    const ctx: PhaseContext<T, V> = {
+  function makeCtx(fsm: FSM<T, V, E>, view: V): PhaseContext<T, V, E> {
+    const ctx: PhaseContext<T, V, E> = {
       config: opts.config,
       stores,
       network,
