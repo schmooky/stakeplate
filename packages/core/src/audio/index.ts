@@ -1,47 +1,72 @@
-// @stakeplate/core/audio — a thin PRE-WIRING over @schmooky/zvuk. The core stands up a
-// standard bus graph (master → music / sfx / ambience), binds it to the HUD's Sound
-// toggle + Music/Effects sliders (persisted), and ducks music while win/sfx play. The
-// game just declares sounds and calls `audio.play('win')` — volume/mute/ducking work.
+// @stakeplate/core/audio — a thin PRE-WIRING over @schmooky/zvuk. The core stands up the
+// standard slot bus graph (nine buses in TWO groups) + master, binds the two groups to the
+// HUD's Music/Effects sliders (persisted) and mutes on the Sound toggle, and ducks music
+// while chosen sfx play. The game just declares sounds and calls `audio.play('win','wins')`.
+//
+//   master
+//   ├── MUSIC group  (Music slider) → music · ambience
+//   └── EFFECTS group (Effects slider) → reels · symbols · anticipation · wins ·
+//                                        voiceover · ui · reverb
+//
+// Groups are zvuk BusGroups (a logical handle: a slider sets every member's level). Keep the
+// per-sound mix in the sound volumes; the sliders scale the whole group.
 
-import { createEngine, Ducker, type Engine, type Bus } from '@schmooky/zvuk';
+import { createEngine, Ducker, type Engine, type Bus, type BusConfig, type BusGroup } from '@schmooky/zvuk';
 import type { BootedHud } from '@open-slot-ui/pixi';
 import type { AudioPort } from '../engine/fsm';
-import { bindMixerToHud } from './bind';
+import { bindMixerToHud, type MixerLike, type MixerGroup } from './bind';
 
-export { bindMixerToHud, type MixerLike } from './bind';
+export { bindMixerToHud, type MixerLike, type MixerGroup } from './bind';
+
+/** Buses in the MUSIC group (driven by the Music slider). */
+export type MusicBus = 'music' | 'ambience';
+/** Buses in the EFFECTS group (driven by the Effects slider). */
+export type SfxBus = 'reels' | 'symbols' | 'anticipation' | 'wins' | 'voiceover' | 'ui' | 'reverb';
+export type BusName = MusicBus | SfxBus;
+
+const MUSIC_BUSES: MusicBus[] = ['music', 'ambience'];
+const SFX_BUSES: SfxBus[] = ['reels', 'symbols', 'anticipation', 'wins', 'voiceover', 'ui', 'reverb'];
 
 export interface GameAudioOptions {
-  /** Initial bus levels (0..1). */
-  buses?: { music?: number; sfx?: number; ambience?: number };
+  /** Initial MUSIC-group level (music + ambience), 0..1. Default 0.8. */
+  music?: number;
+  /** Initial EFFECTS-group level (reels…reverb), 0..1. Default 1. */
+  effects?: number;
   masterHeadroom?: number;
-  /** Duck the `music` bus while THIS bus is active (default `'sfx'`; `null` = no ducking). */
-  duckMusicFrom?: string | null;
+  /** Duck the MUSIC group while THESE sfx buses are active (default `['wins']`; `null` = off). */
+  duckMusicFrom?: SfxBus | SfxBus[] | null;
   duckAmount?: number;
 }
 
-/** A sound to load onto a bus, or a music track (intro/loop/outro). */
+/** A sound to load onto a bus, or a music track (intro/loop/outro → the `music` bus). */
 export type SoundEntry =
-  | { name: string; kind?: 'sound'; url: string | string[]; bus?: string }
+  | { name: string; kind?: 'sound'; url: string | string[]; bus?: BusName }
   | { name: string; kind: 'music'; loop: string | string[]; intro?: string | string[]; outro?: string | string[] };
 
-/** The pre-wired game mixer. Satisfies {@link AudioPort} (play/music/stopMusic). */
-export class GameAudio implements AudioPort {
-  readonly engine: Engine;
-  private readonly duckFrom: string | null;
+/** The pre-wired game mixer. Satisfies {@link AudioPort} + {@link MixerLike}. */
+export class GameAudio implements AudioPort, MixerLike {
+  readonly engine: Engine<BusName>;
+  private readonly musicGroup: BusGroup;
+  private readonly effectsGroup: BusGroup;
+  private readonly duckFrom: SfxBus[];
   private readonly duckAmount: number;
   private unlocked = false;
   private currentMusic: { stop(opts?: { fade?: number }): void } | null = null;
 
   constructor(opts: GameAudioOptions = {}) {
-    this.engine = createEngine({
-      buses: {
-        music: { level: opts.buses?.music ?? 0.8 },
-        sfx: { level: opts.buses?.sfx ?? 1 },
-        ambience: { level: opts.buses?.ambience ?? 0.6 },
-      },
+    const musicLevel = opts.music ?? 0.8;
+    const fxLevel = opts.effects ?? 1;
+    const buses = {} as Record<BusName, BusConfig>;
+    for (const b of MUSIC_BUSES) buses[b] = { level: musicLevel };
+    for (const b of SFX_BUSES) buses[b] = { level: fxLevel };
+    this.engine = createEngine<BusName>({
+      buses,
       master: { headroom: opts.masterHeadroom ?? -3, limiter: { threshold: -1 } },
     });
-    this.duckFrom = opts.duckMusicFrom === undefined ? 'sfx' : opts.duckMusicFrom;
+    this.musicGroup = this.engine.busGroup('music', MUSIC_BUSES.map((b) => this.engine.bus(b)));
+    this.effectsGroup = this.engine.busGroup('effects', SFX_BUSES.map((b) => this.engine.bus(b)));
+    const df = opts.duckMusicFrom === undefined ? (['wins'] as SfxBus[]) : opts.duckMusicFrom;
+    this.duckFrom = df == null ? [] : Array.isArray(df) ? df : [df];
     this.duckAmount = opts.duckAmount ?? 0.5;
   }
 
@@ -50,14 +75,34 @@ export class GameAudio implements AudioPort {
     if (this.unlocked) return;
     await this.engine.unlock();
     this.unlocked = true;
-    if (this.duckFrom) {
-      const ducker = new Ducker(this.engine.context, this.engine.bus(this.duckFrom), { amount: this.duckAmount, attack: 0.05, release: 0.3 });
-      this.engine.bus('music').addFx(ducker);
+    // Duck music + ambience while each chosen sfx bus is active.
+    for (const src of this.duckFrom) {
+      for (const target of MUSIC_BUSES) {
+        const ducker = new Ducker(this.engine.context, this.engine.bus(src), { amount: this.duckAmount, attack: 0.05, release: 0.3 });
+        this.engine.bus(target).addFx(ducker);
+      }
     }
   }
 
-  bus(name: string): Bus {
+  // ── MixerLike (the HUD sliders + mute drive these) ────────────────────────────
+  setGroupLevel(group: MixerGroup, level: number): void {
+    (group === 'music' ? this.musicGroup : this.effectsGroup).level = level;
+  }
+  getGroupLevel(group: MixerGroup): number {
+    return (group === 'music' ? this.musicGroup : this.effectsGroup).level;
+  }
+  setMuted(muted: boolean): void {
+    this.musicGroup.muted = muted;
+    this.effectsGroup.muted = muted;
+  }
+
+  /** A single bus (for per-sound routing, sends, FX inserts). */
+  bus(name: BusName): Bus {
     return this.engine.bus(name);
+  }
+  /** A volume group handle (`'music'` or `'effects'`). */
+  group(name: MixerGroup): BusGroup {
+    return name === 'music' ? this.musicGroup : this.effectsGroup;
   }
 
   /** Preload a manifest of sounds + music onto their buses. */
@@ -66,13 +111,13 @@ export class GameAudio implements AudioPort {
       entries.map((e) =>
         'kind' in e && e.kind === 'music'
           ? this.engine.loadMusic(e.name, { loop: e.loop, ...(e.intro ? { intro: e.intro } : {}), ...(e.outro ? { outro: e.outro } : {}) })
-          : this.engine.loadSound(e.name, e.url, { bus: e.bus ?? 'sfx' }),
+          : this.engine.loadSound(e.name, e.url, { bus: e.bus ?? 'ui' }),
       ),
     );
   }
 
-  play(name: string, opts?: { bus?: string; volume?: number }): void {
-    this.engine.sound(name).play({ bus: opts?.bus ?? 'sfx', ...(opts?.volume != null ? { volume: opts.volume } : {}) });
+  play(name: string, opts?: { bus?: BusName; volume?: number }): void {
+    this.engine.sound(name).play({ ...(opts?.bus ? { bus: opts.bus } : {}), ...(opts?.volume != null ? { volume: opts.volume } : {}) });
   }
 
   music(name: string, opts?: { fadeIn?: number }): void {
@@ -91,10 +136,10 @@ export function createGameAudio(opts?: GameAudioOptions): GameAudio {
 }
 
 /**
- * Bind the HUD's sound controls to the audio buses (Music slider → music, Effects → sfx,
- * persisted; Sound toggle → mute). Returns a disposer. `createStakeGame` calls this for you
- * (via {@link bindMixerToHud}) when you pass `audio`; use it directly only to opt out or
- * wire a mixer the core didn't get.
+ * Bind the HUD's sound controls to the audio groups (Music slider → music group, Effects →
+ * effects group, persisted; Sound toggle → mute). Returns a disposer. `createStakeGame` calls
+ * this for you (via {@link bindMixerToHud}) when you pass `audio`; use it directly only to opt
+ * out or wire a mixer the core didn't get.
  */
 export function bindAudioToHud(audio: GameAudio, hud: BootedHud, opts: { storageKey?: string } = {}): () => void {
   return bindMixerToHud(audio, hud, opts);

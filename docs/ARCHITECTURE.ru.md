@@ -290,57 +290,71 @@ class MyScene {
 
 ## 10. Звук — `@stakeplate/core/audio`
 
-Тонкая обёртка над `@schmooky/zvuk`: стандартный граф шин (master → `music` / `sfx` /
-`ambience`), привязка к слайдерам HUD и дакинг музыки под sfx. Игра только объявляет звуки.
+Тонкая обёртка над `@schmooky/zvuk`. Ядро поднимает стандартный слот-граф — **девять шин в
+двух группах**, а два слайдера HUD (**Music** и **Effects**) управляют громкостью групп.
+
+```
+master
+├── ГРУППА MUSIC   (слайдер Music)   → music · ambience
+└── ГРУППА EFFECTS (слайдер Effects) → reels · symbols · anticipation · wins ·
+                                       voiceover · ui · reverb
+```
+
+Группа — это `BusGroup` zvuk: слайдер выставляет уровень **каждой** шине группы. Поэтому
+относительный баланс держите в громкости самих звуков (`volume`/микс), а слайдер масштабирует
+группу целиком. Передайте звуки — ядро само создаёт микшер (лениво, отдельным чанком),
+привязывает группы к слайдерам + mute и разблокирует звук на первом спине:
 
 ```ts
-import { createGameAudio } from '@stakeplate/core/audio';
-import spinUrl from './sfx/spin.mp3';
-import winUrl from './sfx/win.mp3';
-import baseLoop from './music/base.mp3';
-
-const audio = createGameAudio({ buses: { music: 0.8, sfx: 1 } }); // + дакинг music ← sfx
-await audio.load([                          // preload манифеста на шины — единственный шаг игры
-  { name: 'spin', url: spinUrl },                  // → шина sfx по умолчанию
-  { name: 'win',  url: winUrl, bus: 'sfx' },
-  { name: 'base', kind: 'music', loop: baseLoop }, // + intro? / outro?
-]);
-
 const game = createStakeGame<Data, View, Ev>({
   // …config, interpretBook, mountView…
-  audio, // ← и всё: ядро САМО привяжет Music/Effects/mute и разблокирует звук на первом спине
+  audio: {
+    sounds: [
+      { name: 'reelstop', url: reelStopUrl, bus: 'reels' },
+      { name: 'land',     url: landUrl,     bus: 'symbols' },
+      { name: 'win',      url: winUrl,      bus: 'wins' },
+      { name: 'click',    url: clickUrl,    bus: 'ui' },
+      { name: 'base',     kind: 'music', loop: baseLoop }, // → шина music
+      { name: 'amb',      url: ambLoopUrl,  bus: 'ambience' },
+    ],
+    music: 0.8,   // стартовый уровень группы music (опц.)
+    effects: 1,   // стартовый уровень группы effects (опц.)
+  },
 });
 ```
 
-Передали `audio` — ядро само делает привязку к HUD (`bindMixerToHud`: Music→music,
-Effects→sfx с persist, Sound-toggle→mute) и `unlock()` на первом спине. Проверка структурная,
-`@schmooky/zvuk` в ядро не тянется — игры без звука его не бандлят. Из фаз/сцены зовите звук:
+Из фаз/сцены — играйте на нужную шину:
 
 ```ts
-ctx.audio?.play('win');                    // на шину sfx; музыка сама «пригибается» (дакинг)
-ctx.audio?.music('base', { fadeIn: 0.4 }); // сменяет текущий трек с кроссфейдом
+ctx.audio?.play('reelstop', { bus: 'reels' });
+ctx.audio?.play('win', { bus: 'wins' });    // music/ambience «пригибаются» (дакинг под wins)
+ctx.audio?.music('base', { fadeIn: 0.4 });
 ctx.audio?.stopMusic({ fade: 0.3 });
 ```
 
+(Продвинуто: вместо манифеста передайте готовый `createGameAudio(...)` — для своих FX, sidechain,
+реверб-сендов: `audio.bus('voiceover').send(audio.bus('reverb'), { amount: 0.3 })`.)
+
 | API | Что делает |
 |---|---|
-| `createGameAudio({ buses?, masterHeadroom?, duckMusicFrom?, duckAmount? })` | поднять микшер (шины + limiter + дакинг) |
-| `audio.load(entries)` | preload звуков/музыки на шины |
-| `audio.play(name, { bus?, volume? })` | сыграть звук (по умолчанию `sfx`) |
+| `audio: { sounds, music?, effects?, duckMusicFrom?, duckAmount?, masterHeadroom? }` | декларативно: ядро создаёт микшер + грузит + привязывает |
+| `createGameAudio(opts)` | собрать микшер вручную (9 шин, 2 группы, limiter, дакинг) |
+| `audio.play(name, { bus?, volume? })` | сыграть звук на шину |
 | `audio.music(name, { fadeIn? })` · `stopMusic({ fade? })` | музыка (кроссфейд текущей) |
-| `audio.unlock()` | resume AudioContext с жеста (1 раз) + армирует дакинг |
-| `audio.bus(name)` | шина zvuk (`.level` 0..1, `.muted`, `fadeTo`, FX-вставки) |
-| `bindAudioToHud(audio, hud, { storageKey? })` | Music→music, Effects→sfx (persist), Sound-toggle→mute; **ядро вызывает само** при переданном `audio` — руками только для opt-out/своей логики |
+| `audio.bus(name)` | шина zvuk (`.level`, `.muted`, `fadeTo`, FX, `send`) |
+| `audio.group('music' \| 'effects')` | группа: уровень/mute всей группы |
+| `bindAudioToHud(audio, hud)` | Music→группа music, Effects→группа effects (persist), mute; **ядро зовёт само** |
 
-- **Шины по умолчанию:** master → `music` (0.8) / `sfx` (1) / `ambience` (0.6); master headroom
-  −3 dB + limiter. Свои уровни — в `createGameAudio({ buses })`.
-- **Дакинг:** `music` пригибается, пока звучит `sfx` (`duckMusicFrom: 'sfx'`, `duckAmount` 0.5);
-  `duckMusicFrom: null` — выключить.
-- **Разблокировка обязательна** с пользовательского жеста (браузер не играет звук до этого) —
-  поэтому `audio.unlock()` на первом спине.
+- **Шины (9):** группа **music** = `music`, `ambience`; группа **effects** = `reels`, `symbols`,
+  `anticipation`, `wins`, `voiceover`, `ui`, `reverb`. Стартовые уровни групп 0.8 / 1, master
+  headroom −3 dB + limiter.
+- **Дакинг:** music-группа пригибается, пока звучит `wins` (по умолчанию `duckMusicFrom: ['wins']`,
+  `duckAmount` 0.5); можно передать список sfx-шин или `null` — выключить.
+- **Разблокировка** обязательна с жеста — ядро зовёт `unlock()` на первом спине (браузер не
+  играет звук до этого).
 
-> `@stakeplate/core/audio` — отдельный подпакет: если звук не нужен, вы его не импортируете и
-> `@schmooky/zvuk` в бандл не попадает.
+> `@stakeplate/core/audio` (с `@schmooky/zvuk`) грузится **отдельным async-чанком** — только
+> когда игра передала звук; на остальные подпакеты ядра он не влияет.
 
 ---
 

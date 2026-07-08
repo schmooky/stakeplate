@@ -19,7 +19,18 @@ import { FSM, type AudioPort, type Phase, type PhaseContext } from '../engine/fs
 import { defaultPhases } from '../engine/phases';
 import { roundInfo, type InterpretBook } from '../engine/round';
 import { bindMixerToHud, type MixerLike } from '../audio/bind';
+import type { GameAudioOptions, SoundEntry } from '../audio';
 import { modeCostOf, type GameConfig } from './config';
+
+/**
+ * Declarative audio: hand the core your sounds and it lazily creates the `@schmooky/zvuk`
+ * mixer (master → music/sfx/ambience buses + ducking), preloads them, and auto-binds it to
+ * the HUD (sliders/mute + unlock). zvuk loads in its OWN async chunk — a game without sound
+ * pays nothing. (Advanced: pass a ready `GameAudio` instance instead, for custom buses/FX.)
+ */
+export interface AudioSpec extends GameAudioOptions {
+  sounds: SoundEntry[];
+}
 
 /** Passed to `mountView` — everything the game's scene needs (not the round/fsm yet). */
 export interface ViewContext {
@@ -38,7 +49,8 @@ export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
   mountView: (host: HTMLElement, ctx: ViewContext) => V;
   /** The game's Present phase (+ any overrides); Idle/Spin/Settle are provided. */
   phases?: Phase<T, V, E>[];
-  audio?: AudioPort | null;
+  /** Sounds (declarative — the core builds + wires the mixer) OR a ready `GameAudio`/AudioPort. */
+  audio?: AudioPort | AudioSpec | null;
   /** Override the transport (tests / a supplied mock). */
   network?: NetworkManager;
   /** Override launch params (tests / embedding). */
@@ -92,7 +104,9 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
   const network = opts.network ?? createNetwork(runtime);
   const stores = new RootStore();
   const ticker = new RealTicker();
-  const audio = opts.audio ?? null;
+  // A ready AudioPort instance is used as-is; an AudioSpec is resolved lazily in start()
+  // (the core creates the zvuk mixer from its own async chunk) — see resolveAudio().
+  let audio: AudioPort | null = opts.audio && !isAudioSpec(opts.audio) ? opts.audio : null;
   const app = new Application();
   const disposers: Array<() => void> = [];
   let hud: BootedHud | null = null;
@@ -135,11 +149,23 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     host.appendChild(app.canvas);
   };
 
+  // Build the mixer from a declarative AudioSpec. The `@stakeplate/core/audio` module (the
+  // ONLY thing that pulls @schmooky/zvuk) is loaded via a DYNAMIC import, so it lands in its
+  // own async chunk — an audio-less game never fetches zvuk. Sounds preload in the background.
+  const resolveAudio = async (): Promise<void> => {
+    if (!isAudioSpec(opts.audio)) return;
+    const { createGameAudio } = await import('../audio');
+    const mixer = createGameAudio(opts.audio);
+    void mixer.load(opts.audio.sounds);
+    audio = mixer;
+  };
+
   async function start(): Promise<void> {
     const hudHost = opts.hudHost ?? document.body;
     const sceneHost = opts.sceneHost ?? hudHost;
     const phases = [...defaultPhases<T, V, E>(), ...(opts.phases ?? [])];
     const machine = (fsm = new FSM<T, V, E>(phases)); // outer `fsm` powers inspect()/requestSpin()
+    await resolveAudio(); // if `audio` is an AudioSpec, build the zvuk mixer (lazy chunk) + preload
 
     // ── REPLAY (Stake ?replay=true): fetch a round + play it back read-only ──────
     if (runtime.replay.active && network.replay) {
@@ -227,7 +253,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     // spin gesture — IF a mixer-like `audio` was provided. Structural check, no @schmooky/zvuk
     // import here, so audio-less games don't bundle it. (A game may bind manually instead.)
     const mixer = audio as unknown as MixerLike | null;
-    if (mixer && typeof mixer.bus === 'function') {
+    if (mixer && typeof mixer.setGroupLevel === 'function') {
       disposers.push(bindMixerToHud(mixer, hud));
       if (typeof mixer.unlock === 'function') {
         const off = hud.on('spinRequested', () => { void mixer.unlock!(); off(); });
@@ -295,4 +321,9 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** An AudioSpec (declarative sounds) vs a ready AudioPort/GameAudio instance. */
+function isAudioSpec(a: unknown): a is AudioSpec {
+  return !!a && typeof a === 'object' && Array.isArray((a as AudioSpec).sounds);
 }

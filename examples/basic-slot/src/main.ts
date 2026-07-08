@@ -4,8 +4,15 @@
 // phase (animate the round). Booted on the demo mock RGS — no backend.
 
 import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
+import { createGameAudio } from '@stakeplate/core/audio';
 import { MiniSlot } from './MiniSlot';
 import { DemoNetwork } from './demoNetwork';
+
+// The mixer: nine buses in two groups (music/effects). The core binds the HUD's Music/Effects
+// sliders + mute to the groups and unlocks on the first spin. Load your sounds via audio.load()
+// or pass `audio: { sounds: [...] }` to createStakeGame instead of an instance.
+const audio = createGameAudio();
+(window as unknown as { __AUDIO__: typeof audio }).__AUDIO__ = audio; // dev/harness handle
 
 /** This game's book-event type — declared once, so `interpretBook`'s `raw` is TYPED. */
 type Ev = { grid: string[][] };
@@ -40,6 +47,7 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
     return scene;
   },
   phases: [present],
+  audio, // core auto-binds Music/Effects sliders + mute + unlock (add sounds via audio.load)
   // The mock RGS owns the ladder (like a real `authenticate` would), per currency.
   network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1 } }),
   hudHost: document.getElementById('hud')!,
