@@ -7,22 +7,33 @@ import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { createGameAudio } from '@stakeplate/core/audio';
 import { MiniSlot } from './MiniSlot';
 import { DemoNetwork } from './demoNetwork';
+import winUrl from './assets/win.mp3';
+import bgmUrl from './assets/bgm.mp3';
 
 // The mixer: nine buses in two groups (music/effects). The core binds the HUD's Music/Effects
-// sliders + mute to the groups and unlocks on the first spin. Load your sounds via audio.load()
-// or pass `audio: { sounds: [...] }` to createStakeGame instead of an instance.
+// sliders + mute to the groups and unlocks on the first spin.
 const audio = createGameAudio();
 (window as unknown as { __AUDIO__: typeof audio }).__AUDIO__ = audio; // dev/harness handle
+
+// The win jingle → `wins` bus (music ducks under it); the BGM is a PLAIN loop, so we let
+// zvuk crossfade its boundary (400 ms) into a seamless loop — no authored intro/tail needed.
+const soundsReady = audio.load([
+  { name: 'win', url: winUrl, bus: 'wins' },
+  { name: 'base', kind: 'music', loop: bgmUrl, loopCrossfadeMs: 400 },
+]);
 
 /** This game's book-event type — declared once, so `interpretBook`'s `raw` is TYPED. */
 type Ev = { grid: string[][] };
 type Data = { grid: string[][]; win: boolean };
 
-/** The game's Present phase — play the round back on the scene, then settle. */
+let musicStarted = false;
+/** The game's Present phase — start the BGM once, ring the win jingle, play the scene, settle. */
 const present: Phase<Data, MiniSlot, Ev> = {
   name: 'present',
   async enter(ctx) {
+    if (!musicStarted) { musicStarted = true; ctx.audio?.music('base', { fadeIn: 0.8 }); } // seamless loop
     const r = ctx.round;
+    if (r?.data.win) ctx.audio?.play('win', { bus: 'wins' });
     if (r) await ctx.view.play(r.data.grid, r.data.win);
     await ctx.fsm.transition('settle');
   },
@@ -58,8 +69,10 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
 // via `game.requestSpin()` + `game.inspect()` (no screenshots, no pixi event synthesis).
 (window as unknown as { __GAME__: typeof game }).__GAME__ = game;
 
-game
-  .start()
+// Preload the sounds (non-fatal), then boot.
+soundsReady
+  .catch((err) => console.warn('[basic-slot] sound load failed (non-fatal)', err))
+  .then(() => game.start())
   .then(() => document.getElementById('boot')?.setAttribute('data-done', '1'))
   .catch((err) => {
     console.error('[basic-slot] boot failed', err);

@@ -38,10 +38,15 @@ export interface GameAudioOptions {
   duckAmount?: number;
 }
 
-/** A sound to load onto a bus, or a music track (intro/loop/outro → the `music` bus). */
+/**
+ * A sound to load onto a bus, or a music track (intro/loop/outro → the `music` bus).
+ * For a PLAIN loop with no authored intro/outro, set `loopCrossfadeMs`: zvuk equal-power
+ * crossfades the loop boundary so a single file loops seamlessly (no click, no stinger/tail
+ * needed) — just the crossfade window in ms.
+ */
 export type SoundEntry =
   | { name: string; kind?: 'sound'; url: string | string[]; bus?: BusName }
-  | { name: string; kind: 'music'; loop: string | string[]; intro?: string | string[]; outro?: string | string[] };
+  | { name: string; kind: 'music'; loop: string | string[]; intro?: string | string[]; outro?: string | string[]; loopCrossfadeMs?: number };
 
 /** The pre-wired game mixer. Satisfies {@link AudioPort} + {@link MixerLike}. */
 export class GameAudio implements AudioPort, MixerLike {
@@ -110,7 +115,11 @@ export class GameAudio implements AudioPort, MixerLike {
     await Promise.all(
       entries.map((e) =>
         'kind' in e && e.kind === 'music'
-          ? this.engine.loadMusic(e.name, { loop: e.loop, ...(e.intro ? { intro: e.intro } : {}), ...(e.outro ? { outro: e.outro } : {}) })
+          ? this.engine.loadMusic(
+              e.name,
+              { loop: e.loop, ...(e.intro ? { intro: e.intro } : {}), ...(e.outro ? { outro: e.outro } : {}) },
+              e.loopCrossfadeMs != null ? { loopCrossfade: e.loopCrossfadeMs / 1000 } : undefined,
+            )
           : this.engine.loadSound(e.name, e.url, { bus: e.bus ?? 'ui' }),
       ),
     );

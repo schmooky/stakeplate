@@ -314,7 +314,7 @@ const game = createStakeGame<Data, View, Ev>({
       { name: 'land',     url: landUrl,     bus: 'symbols' },
       { name: 'win',      url: winUrl,      bus: 'wins' },
       { name: 'click',    url: clickUrl,    bus: 'ui' },
-      { name: 'base',     kind: 'music', loop: baseLoop }, // → шина music
+      { name: 'base',     kind: 'music', loop: baseLoop, loopCrossfadeMs: 400 }, // → шина music
       { name: 'amb',      url: ambLoopUrl,  bus: 'ambience' },
     ],
     music: 0.8,   // стартовый уровень группы music (опц.)
@@ -348,6 +348,9 @@ ctx.audio?.stopMusic({ fade: 0.3 });
 - **Шины (9):** группа **music** = `music`, `ambience`; группа **effects** = `reels`, `symbols`,
   `anticipation`, `wins`, `voiceover`, `ui`, `reverb`. Стартовые уровни групп 0.8 / 1, master
   headroom −3 dB + limiter.
+- **Бесшовный луп:** для музыки-**лупа без авторских intro/tail** задайте `loopCrossfadeMs` —
+  zvuk equal-power кроссфейдит границу лупа, и один файл крутится без щелчка (стингер/хвост
+  генерировать не надо). Полноценный трёхчастный трек — через `intro`/`loop`/`outro`.
 - **Дакинг:** music-группа пригибается, пока звучит `wins` (по умолчанию `duckMusicFrom: ['wins']`,
   `duckAmount` 0.5); можно передать список sfx-шин или `null` — выключить.
 - **Разблокировка** обязательна с жеста — ядро зовёт `unlock()` на первом спине (браузер не
