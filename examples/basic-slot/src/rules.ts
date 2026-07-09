@@ -32,14 +32,6 @@ const built = buildRules({
 
 export const rulesMenu = built.menu;
 
-// Social wording: the core's control-guide overrides + this game's own restricted strings.
-export const socialMessages: Record<string, Record<string, string>> = {
-  en: {
-    ...built.socialEn,
-    '**Basic Slot** is a 3×3 slot. Match symbols on a line to win — bigger symbols pay more, and **Wild** substitutes for all.':
-      '**Basic Slot** is a 3×3 slot. Match symbols on a line to win — bigger symbols award more, and **Wild** substitutes for all.',
-    'Substitutes for every paying symbol.': 'Substitutes for every symbol.',
-    'Pays from anywhere on the reels.': 'Awards from anywhere on the reels.',
-    'Set your bet with the − and + buttons.': 'Set your play with the − and + buttons.',
-  },
-};
+// Social wording is AUTO-DERIVED: buildRules scanned every English string in the menu and
+// swapped restricted terms (bet→play, pays→wins, …). No hand-authoring needed.
+export const socialMessages: Record<string, Record<string, string>> = { en: built.socialEn };

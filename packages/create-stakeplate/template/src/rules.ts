@@ -25,13 +25,6 @@ const built = buildRules({
 
 export const rulesMenu = built.menu;
 
-// Social wording: the core's disclaimer/guide overrides + this game's restricted strings →
-// their social equivalents (crafted to pass the forbidden-phrase gate).
-export const socialMessages: Record<string, Record<string, string>> = {
-  en: {
-    ...built.socialEn,
-    'Match symbols on a line to win — **bigger symbols pay more**.': 'Match symbols on a line to win — **bigger symbols award more**.',
-    'Substitutes for every paying symbol.': 'Substitutes for every symbol.',
-    'Set your bet with the − and + buttons.': 'Set your play with the − and + buttons.',
-  },
-};
+// Social wording is AUTO-DERIVED by buildRules (every menu string scanned + restricted terms
+// swapped). Add your own only if you use wording the dictionary doesn't cover.
+export const socialMessages: Record<string, Record<string, string>> = { en: built.socialEn };

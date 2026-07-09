@@ -11,6 +11,9 @@
 // disclaimer is legal-exact — mandated verbatim on every platform, so it is NEVER swapped.
 
 import type { BlockSpec, MenuSpec } from '@open-slot-ui/core';
+import { toSocial } from './social';
+
+export * from './social';
 
 /** RTP / volatility / max-win etc. — shown as a stat grid. Values are display strings. */
 export interface RulesStats {
@@ -65,18 +68,52 @@ export const DEFAULT_CONTROL_GUIDE: string[] = [
 
 /** The EXACT Stake Engine disclaimer — never reworded, never given a social override. */
 export const STAKE_DISCLAIMER =
-  'Malfunction voids all wins and plays. A consistent internet connection is required. In the event of a disconnection, reload the game to finish any uncompleted rounds. The expected return is calculated over many plays. The game display is not representative of any physical device and is for illustrative purposes only. Winnings are settled according to the amount received from the Remote Game Server and not from events within the web browser.';
+  'Malfunction voids all wins and plays. A consistent internet connection is required. In the event of a disconnection, reload the game to finish any uncompleted rounds. The expected return is calculated over many plays. The game display is not representative of any physical device and is for illustrative purposes only. Winnings are settled according to the amount received from the Remote Game Server and not from events within the web browser. TM and © 2026 Stake Engine.';
 
-/** { normal → social } overrides for the CONTROL GUIDE lines (the disclaimer is exact — none). */
-const CORE_SOCIAL: Record<string, string> = {
-  '**Spin** — plays one round at your current bet; press and hold to spin in turbo.':
-    '**Spin** — plays one round at your current play; press and hold to spin in turbo.',
-  '**＋ / −** — raise or lower your bet before spinning.': '**＋ / −** — raise or lower your play before spinning.',
-  '**Menu** — opens settings, the paytable and these rules.': '**Menu** — opens settings, the prize table and these rules.',
-  Paytable: 'Prizes',
-  RTP: 'RTP',
-  'Max win': 'Max prize',
-};
+/** Collect every translatable English string in a block tree (for social auto-derivation). */
+function collectStrings(blocks: BlockSpec[], out: string[] = []): string[] {
+  for (const b of blocks) {
+    switch (b.kind) {
+      case 'text':
+      case 'heading':
+      case 'subheading':
+      case 'legal':
+        out.push(b.text);
+        break;
+      case 'callout':
+        if (b.title) out.push(b.title);
+        out.push(b.text);
+        break;
+      case 'steps':
+        out.push(...b.items);
+        break;
+      case 'stat-grid':
+        for (const it of b.items) out.push(it.label, it.value);
+        break;
+      case 'cards':
+        for (const it of b.items) { out.push(it.title); if (it.text) out.push(it.text); }
+        break;
+      case 'table':
+        if (b.columns) out.push(...b.columns);
+        for (const r of b.rows) out.push(...r);
+        break;
+      case 'media':
+        if (b.title) out.push(b.title);
+        out.push(b.text);
+        break;
+      case 'paytable':
+        for (const r of b.rows) if (r.symbol) out.push(r.symbol);
+        break;
+      case 'group':
+        if (b.title) out.push(b.title);
+        collectStrings(b.children, out);
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
+}
 
 // ── The builder ────────────────────────────────────────────────────────────────────
 
@@ -131,5 +168,14 @@ export function buildRules(opts: BuildRulesOptions = {}): BuiltRules {
     ...(opts.paytable ? { paytable: opts.paytable } : {}),
     rules,
   };
-  return { menu, socialEn: { ...CORE_SOCIAL } };
+
+  // Auto-derive the social copy: scan EVERY English string in the menu and swap restricted
+  // wording (`toSocial`). The disclaimer is legal-exact (mandated verbatim) → never rewritten.
+  const socialEn: Record<string, string> = {};
+  for (const s of collectStrings([...rules, ...(opts.paytable ?? [])])) {
+    if (s === STAKE_DISCLAIMER) continue;
+    const social = toSocial(s);
+    if (social !== s) socialEn[s] = social;
+  }
+  return { menu, socialEn };
 }
