@@ -7,6 +7,7 @@ import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { createGameAudio } from '@stakeplate/core/audio';
 import { Scene } from './Scene';
 import { DemoNetwork } from './demoNetwork';
+import { rulesMenu, socialMessages } from './rules';
 
 /** Your book-event type — declared once, so `interpretBook`'s `raw` is TYPED (not `unknown`). */
 type Ev = { grid: string[][] };
@@ -37,7 +38,7 @@ const present: Phase<Data, Scene, Ev> = {
 
 const game = createStakeGame<Data, Scene, Ev>({
   // The bet ladder, default bet and buy-confirm come from the RGS/jurisdiction, NOT here.
-  config: { title: '{{name}}', rtp: 96 },
+  config: { title: '{{name}}', rtp: 96, rules: rulesMenu, socialMessages },
   // The ONE money seam: parse the book's events into your model. Pure. The win/multiplier
   // are the engine's (server-authoritative) — never compute payouts on the client.
   interpretBook: (raw, info): Data => {

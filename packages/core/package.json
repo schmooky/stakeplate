@@ -58,6 +58,12 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js",
       "default": "./dist/testing.js"
+    },
+    "./rules": {
+      "source": "./src/rules/index.ts",
+      "types": "./dist/rules.d.ts",
+      "import": "./dist/rules.js",
+      "default": "./dist/rules.js"
     }
   },
   "files": [

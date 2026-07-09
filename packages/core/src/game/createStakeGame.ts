@@ -144,7 +144,11 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     // Compliance: the buy-feature confirm threshold is jurisdiction policy, not a game knob.
     buyFeature: { confirmAboveCost: s.confirmBuyAboveCost },
     ...(opts.config.rules ? { menu: opts.config.rules } : {}),
-    locale: { locale: runtime.language, messages: { en: {} } },
+    locale: {
+      locale: runtime.language,
+      messages: opts.config.messages ?? { en: {} },
+      ...(opts.config.socialMessages ? { socialMessages: opts.config.socialMessages } : {}),
+    },
     ...(opts.config.spec ?? {}),
   });
 

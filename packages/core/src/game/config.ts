@@ -21,8 +21,13 @@ export interface GameConfig {
   rtp?: number;
   /** Mode key → cost multiplier (a number) or a `ModeConfig`. `base` defaults to 1. */
   modes?: Record<string, ModeConfig | number>;
-  /** Rules blocks for the HUD menu (`@open-slot-ui` `BlockSpec[]` / `MenuSpec`) — opaque here. */
+  /** Rules/info menu for the HUD (`@open-slot-ui` `MenuSpec`) — build it with `@stakeplate/core/rules` `buildRules`. */
   rules?: unknown;
+  /** i18n messages per locale (`{ en: { key: text }, es: {…} }`) for the HUD + rules text. */
+  messages?: Record<string, Record<string, string>>;
+  /** SOCIAL/sweepstakes wording per locale — swapped in when social mode is on. Merge in
+   *  `buildRules().socialEn` so the core's disclaimer/guide are social-safe. */
+  socialMessages?: Record<string, Record<string, string>>;
   /** Delay multipliers per turbo level (off / turbo / super). Default `[1, 0.4, 0.12]`. */
   turboSpeeds?: number[];
   /** Pause (ms) between autoplay/hold spins. Default 250. Scales with turbo. */

@@ -7,6 +7,7 @@ import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { createGameAudio } from '@stakeplate/core/audio';
 import { MiniSlot } from './MiniSlot';
 import { DemoNetwork } from './demoNetwork';
+import { rulesMenu, socialMessages } from './rules';
 import winUrl from './assets/win.mp3';
 import bgmUrl from './assets/bgm.mp3';
 
@@ -46,6 +47,8 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
   config: {
     title: 'Basic Slot',
     rtp: 96,
+    rules: rulesMenu, // full compliant info menu (buildRules: control guide + disclaimer + stats)
+    socialMessages, // social-mode wording swaps (core + game restricted terms)
   },
   // The one money seam: parse the book's grid. `raw` is `Round<Ev>` → `roundEvents(raw)` is
   // `Ev[]`, no cast. The win/multiplier are the engine's (server-authoritative).

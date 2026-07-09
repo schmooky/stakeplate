@@ -11,6 +11,7 @@ export default defineConfig({
     stores: 'src/stores/index.ts',
     audio: 'src/audio/index.ts',
     testing: 'src/testing/index.ts',
+    rules: 'src/rules/index.ts',
   },
   format: ['esm'],
   platform: 'neutral',
