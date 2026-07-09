@@ -4,8 +4,15 @@
 export interface ModeConfig {
   /** Cost multiplier (× base bet). `base` is 1. */
   cost: number;
-  /** A one-shot bought bonus (vs a toggled boost) — informs the buy-confirm flow. */
+  /** A one-shot bought bonus — shown as a `Buy` card in the buy-feature modal (opened by the
+   *  bonus button). Buying it spins this mode once (through the jurisdiction confirm gate). */
   buy?: boolean;
+  /** An activatable per-spin bet surcharge — shown as an `Activate` card (vs a one-tap `Buy`). */
+  boost?: boolean;
+  /** Display name for the feature card (defaults to the capitalized mode key). */
+  name?: string;
+  /** Card art (URL or data URI) for the feature card. A neutral gradient is used when absent. */
+  image?: string;
 }
 
 export interface GameConfig {

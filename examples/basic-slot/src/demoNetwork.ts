@@ -11,8 +11,10 @@ const randomGrid = (): string[][] =>
 
 export class DemoNetwork extends MockNetworkManager {
   async play(args: PlayArgs): Promise<PlayResponse> {
-    const win = Math.random() < 0.42;
-    const multiplier = win ? +(0.5 + Math.random() * 8).toFixed(2) : 0; // 0.5×..8.5×
+    const bought = args.mode === 'bonus' || args.mode === 'super'; // one-shot bought bonuses → big win
+    const ante = args.mode === 'lucky'; // the activated ante → a normal spin, just win more often
+    const win = bought || Math.random() < (ante ? 0.55 : 0.42);
+    const multiplier = bought ? +(30 + Math.random() * 170).toFixed(2) : win ? +(0.5 + Math.random() * 8).toFixed(2) : 0;
     this.forceRound({ payoutMultiplier: Math.round(multiplier * 100), events: [{ grid: randomGrid() }] });
     return super.play(args);
   }

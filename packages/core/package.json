@@ -84,8 +84,8 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@open-slot-ui/core": ">=0.7",
-    "@open-slot-ui/pixi": ">=0.7",
+    "@open-slot-ui/core": ">=0.8.2",
+    "@open-slot-ui/pixi": ">=0.8.2",
     "@schmooky/zvuk": ">=1.13",
     "pixi-reels": "*",
     "pixi.js": "^8"
@@ -111,8 +111,8 @@
     "mobx": "^6.13.0"
   },
   "devDependencies": {
-    "@open-slot-ui/core": "^0.8.1",
-    "@open-slot-ui/pixi": "^0.8.1",
+    "@open-slot-ui/core": "^0.8.2",
+    "@open-slot-ui/pixi": "^0.8.2",
     "@schmooky/zvuk": "^1.13.0",
     "pixi.js": "^8",
     "tsdown": "^0.22.4",

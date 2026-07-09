@@ -120,15 +120,28 @@ interface GameConfig {
   version?: string;
   currency?: string;              // фолбэк; сессия/`?currency=` побеждает
   rtp?: number;                   // ТОЛЬКО показ (readout/правила); сервер/report — истина
-  modes?: Record<string, ModeConfig | number>; // base, bonus, … с их cost-множителями
-  rules?: unknown;                // содержимое меню/правил (compliance)
+  modes?: Record<string, ModeConfig | number>; // base, bonus, … с cost-множителями и картами buy/boost
+  rules?: MenuSpec;               // меню/правила — стройте через `@stakeplate/core/rules` buildRules (§10)
+  messages?: Record<string, Record<string, string>>;       // i18n-тексты по локали
+  socialMessages?: Record<string, Record<string, string>>; // social-режим (подмешайте buildRules().socialEn)
+  turboSpeeds?: number[];         // множители задержек по уровням турбо (по умолчанию [1, 0.4, 0.12])
+  autoplayGapMs?: number;         // пауза между авто-спинами, мс (по умолчанию 250; масштабируется турбо)
   spec?: Record<string, unknown>; // сырой проброс в mountHud (крайние случаи)
+}
+
+// Режим = число (просто cost-множитель) или объект с картой для модалки buy-фич (§9).
+interface ModeConfig {
+  cost: number;    // ПОЛНЫЙ множитель стоимости (× ставка); у base = 1
+  buy?: boolean;   // карта «Buy» — единоразовая покупка (спин этого режима один раз за cost×)
+  boost?: boolean; // карта «Activate» — переключаемое анте (каждый спин идёт этим режимом за cost×)
+  name?: string;   // подпись карты (по умолчанию — Capitalize(ключ))
+  image?: string;  // арт карты (URL/data-URI); без него — нейтральный градиент
 }
 ```
 
 > Лестница ставок (`betLevels`), ставка по умолчанию (`defaultBetLevel`) и порог
 > `confirmBuyAboveCost` берутся из `auth.config` / юрисдикции. Игра лишь объявляет, что режим
-> — покупка (`modes.bonus.buy = true`); порог подтверждения — политика Stake, не выбор игры.
+> — покупка (`buy`) или анте (`boost`); порог подтверждения — политика Stake, не выбор игры.
 
 ### 4.2. `interpretBook: (raw: Round<E>, info) => T` — единственный «денежный шов»
 
@@ -262,7 +275,90 @@ interface PhaseContext<T, V> {
 
 ---
 
-## 9. Ассеты (pixi)
+## 9. Buy-фичи — покупка и анте (модалка списка фич)
+
+Как только в `config.modes` есть режим с `buy` или `boost`, ядро **само** показывает кнопку
+bonus, и клик по ней открывает модалку-**список** фич (`mountBuyFeatureModal` из
+`@open-slot-ui/pixi` — библиотека владеет вёрсткой, подтверждением и одиночной активацией). На
+каждую фичу — карточка. Вы объявляете только режимы + (опц.) `name`/`image` карты; всё
+остальное подключается автоматически.
+
+```ts
+modes: {
+  base: 1,
+  bonus: { cost: 100, buy: true,   name: 'Free Spins', image: freeSpinsArt }, // карта Buy
+  super: { cost: 300, buy: true,   name: 'Super Bonus', image: superArt },     // карта Buy
+  lucky: { cost: 2,   boost: true, name: 'Lucky Bet',  image: luckyArt },      // карта Activate (анте 2×)
+}
+```
+
+Два типа карт:
+
+- **`buy`** — единоразовая покупка. Клик **Buy** → (если стоимость выше порога юрисдикции)
+  подтверждение → спин этого режима **один раз**: `SpinPhase` списывает `cost×` ставки, потом
+  игра возвращается к `base`. Ядро делает `setOneShotMode(id)` + спин.
+- **`boost`** — переключаемое **анте**. Клик **Activate** → анте включается и становится
+  активным режимом (`setActiveMode`), поэтому **каждый** следующий спин идёт этим режимом за
+  его полный `cost×`; в ридауте ставки показывается **эффективная** ставка (`base × cost`,
+  подсвеченная), а стор хранит базовую. Повторный клик выключает. `activation: 'single'` — одно
+  анте за раз.
+
+Стоимость и подтверждение:
+
+- `cost` в конфиге — **полный** множитель (× ставка). Карта `boost` показывает **надбавку**
+  (`cost − 1`): анте 2× → «+1× ставка», при этом спин всё равно стоит полные 2×.
+- Порог подтверждения — **политика юрисдикции** (`hud.shouldConfirmBuy`), не конфиг. Подтверждают
+  только суммы **выше** порога (обычно 2×), поэтому анте ровно 2× активируется без клика-
+  подтверждения — это соответствует правилам Stake (нет one-click выше 2×).
+
+---
+
+## 10. Правила и тексты — `@stakeplate/core/rules` `buildRules`
+
+Stake требует **полное** меню-правила: how-to-play, гид по **каждой** кнопке, RTP + Max Win по
+режимам, волатильность, **точный дисклеймер**, фичи. Пропущенный блок → реджект. `buildRules`
+собирает совместимый скелет: гид по стандартным кнопкам HUD и **дословный дисклеймер Stake**
+написаны **один раз в ядре** (локализованы + social), а вы даёте только контент своей игры.
+
+```ts
+import { buildRules } from '@stakeplate/core/rules';
+
+const built = buildRules({
+  about: 'Классический 3×3 слот…',              // абзац «About the game»
+  howToPlay: ['Выберите ставку', 'Нажмите спин', 'Совпадения по линиям — выигрыш'],
+  features: [{ icon: '🎁', title: 'Free Spins', text: 'Купите за 100× ставки.' }],
+  paytable: [{ kind: 'paytable', id: 'pt', /* строки символ→выплата */ }],
+  stats: { rtp: '96.00%', volatility: 'High', maxWin: '5,000×', lines: '5' },
+  sound: 'sliders',                              // как Settings показывает звук: toggle | master | sliders
+  // controlGuide?: string[]  — переопределить гид по кнопкам (по умолчанию — каноничный из ядра)
+  // extra?: BlockSpec[]       — доп. блоки перед дисклеймером
+  // disclaimer?: boolean      — по умолчанию true (точный текст Stake)
+});
+
+config.rules = built.menu;                       // → белое HTML-меню (mountInfoMenu), как в Figma
+config.socialMessages = { en: built.socialEn };  // авто-выведенные social-подмены слов
+```
+
+`buildRules(opts)` возвращает `{ menu: MenuSpec; socialEn: Record<string, string> }`:
+
+- **`menu`** — готовый `MenuSpec` со всеми блоками в правильном порядке (About → How to play →
+  Features → **User Interaction Guide** → Stats → ваш `extra` → **Disclaimer**). Кладите в
+  `config.rules`.
+- **`socialEn`** — `{ обычный текст → social }` для строк, которые меняются в Stake-US social-
+  режиме (дисклеймер **не** меняется — он legal-точный). Кладите в `config.socialMessages.en`.
+
+Social-словарь и проверка (subpath `@stakeplate/core/rules`):
+
+- `toSocial(text)` — заменяет слова по `SOCIAL_REPLACEMENTS` (по границам слов, сохраняя регистр).
+- `findRestricted(text)` — **агрессивно** ищет запрещённые слова, даже как части слов; прогоните
+  на запуске по вашим en-текстам, чтобы поймать пропущенные термины до сабмита.
+
+Все входы (тумблеры/слайдеры Settings, шаги) имеют описания — это требование Stake; каноничные
+описания уже в ядре, свои блоки описывайте так же.
+
+---
+
+## 11. Ассеты (pixi)
 
 Ядро **не грузит ассеты игры** — оно владеет только HUD, boot-сплэшем и `showBootError`.
 Текстуры, атласы, spine грузит **ваша сцена** в `mountView` через pixi `Assets` (сцена —
@@ -298,7 +394,7 @@ class MyScene {
 
 ---
 
-## 10. Звук — `@stakeplate/core/audio`
+## 12. Звук — `@stakeplate/core/audio`
 
 Тонкая обёртка над `@schmooky/zvuk`. Ядро поднимает стандартный слот-граф — **девять шин в
 двух группах**, а два слайдера HUD (**Music** и **Effects**) управляют громкостью групп.
@@ -371,7 +467,7 @@ ctx.audio?.stopMusic({ fade: 0.3 });
 
 ---
 
-## 11. Тестирование без бэкенда
+## 13. Тестирование без бэкенда
 
 `@stakeplate/core/testing` + `/rgs`:
 
@@ -390,7 +486,7 @@ net.forceRound({ payoutMultiplier: 500, events: [{ grid: winningGrid }] }); // 5
 
 ---
 
-## 12. Граница ответственности
+## 14. Граница ответственности
 
 **Ваше (внутри игры):** сцена и барабаны, презентер, фаза `Present`, `interpretBook`,
 `config`, тексты правил, звуки, математика (на этапе сборки).
@@ -411,7 +507,7 @@ HUD, набор иконок HUD по умолчанию, цикл раунда.
 
 ---
 
-## 13. TL;DR
+## 15. TL;DR
 
 ```
 Дайте: config + interpretBook + mountView + Present-фазу.

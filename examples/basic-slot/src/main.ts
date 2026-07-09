@@ -23,6 +23,13 @@ const soundsReady = audio.load([
   { name: 'base', kind: 'music', loop: bgmUrl, loopCrossfadeMs: 400 },
 ]);
 
+/** A throwaway feature-card image: an emoji on a gradient, as an inline SVG data URI. A real
+ *  game passes its own art URL; this keeps the demo self-contained (no extra asset files). */
+const cardArt = (emoji: string, from: string, to: string): string =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="320" height="200" fill="url(#g)"/><text x="160" y="132" font-size="96" text-anchor="middle">${emoji}</text></svg>`,
+  )}`;
+
 /** This game's book-event type — declared once, so `interpretBook`'s `raw` is TYPED. */
 type Ev = { grid: string[][] };
 type Data = { grid: string[][]; win: boolean };
@@ -47,6 +54,17 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
   config: {
     title: 'Basic Slot',
     rtp: 96,
+    // Buy modes → the bonus button appears and opens the feature-LIST modal (a card each).
+    // Buying a card (its cost × the bet) runs the confirm gate, then spins that mode once.
+    // `base` is the normal spin; `name`/`image` skin the card.
+    modes: {
+      base: 1,
+      // `buy` cards → one-shot bought bonuses (spin once, full cost). `boost` → an activatable
+      // ante: while on, every spin plays this mode at 2× the bet (card shows the +1× surcharge).
+      bonus: { cost: 100, buy: true, name: 'Free Spins', image: cardArt('🎁', '#7b3fe4', '#3f2b96') },
+      super: { cost: 300, buy: true, name: 'Super Bonus', image: cardArt('💎', '#e4b03f', '#8a5a1e') },
+      lucky: { cost: 2, boost: true, name: 'Lucky Bet', image: cardArt('🍀', '#2ea043', '#14532d') },
+    },
     rules: rulesMenu, // full compliant info menu (buildRules: control guide + disclaimer + stats)
     socialMessages, // social-mode wording swaps (core + game restricted terms)
   },
@@ -66,7 +84,7 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
   phases: [present],
   audio, // core auto-binds Music/Effects sliders + mute + unlock (add sounds via audio.load)
   // The mock RGS owns the ladder (like a real `authenticate` would), per currency.
-  network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1 } }),
+  network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1, bonus: 100, super: 300, lucky: 2 } }),
   hudHost: document.getElementById('hud')!,
   sceneHost: document.getElementById('scene')!,
 });

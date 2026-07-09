@@ -6,7 +6,7 @@
 // HUD/pixi peers; the engine stays decoupled behind ports.
 
 import { Application } from 'pixi.js';
-import { mountHud, showBootError, type BootedHud } from '@open-slot-ui/pixi';
+import { mountHud, showBootError, mountBuyFeatureModal, type BootedHud, type FeatureSpec } from '@open-slot-ui/pixi';
 import { loadBuiltinArt } from '@open-slot-ui/pixi/art';
 import { resolveCurrency, isSocialCurrency } from '@open-slot-ui/core';
 import { reaction } from 'mobx';
@@ -139,8 +139,9 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     betLadder: { levels: s.betLevels, index: Math.max(0, s.betLevels.indexOf(s.defaultBet)) },
     rtp: s.rtp,
     game: { name: opts.config.title, version: opts.config.version ?? '1.0.0' },
-    // Stake owns fullscreen in its iframe — the game must not render its own.
-    controls: { fullscreen: { hidden: true } },
+    // Stake owns fullscreen in its iframe — the game must not render its own. The bonus
+    // (buy-feature) button shows only when a mode is a buy/boost card — it opens the feature list.
+    controls: { fullscreen: { hidden: true }, ...(buyFeaturesOf(opts.config).length ? { bonus: { hidden: false } } : {}) },
     // Compliance: the buy-feature confirm threshold is jurisdiction policy, not a game knob.
     buyFeature: { confirmAboveCost: s.confirmBuyAboveCost },
     ...(opts.config.rules ? { menu: opts.config.rules } : {}),
@@ -254,7 +255,11 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
 
     // reactions store→HUD + HUD events
     disposers.push(reaction(() => stores.balance.balance, (b) => hud!.setBalance(b), { fireImmediately: false }));
-    disposers.push(hud.on('valueChanged', (p) => { const v = p as { id?: string; value?: number }; if (v?.id === 'bet' && typeof v.value === 'number') stores.balance.setBet(v.value); }));
+    // The bet stepper is the base-bet source of truth. It emits `valueChanged` with
+    // `id: 'bet-stepper'` and the ladder value (never the boosted display), so this feeds the
+    // BASE bet even while an ante is active. (The lib mirrors it into `ui.bet`; the boost
+    // reaction then overwrites the readout with the effective stake.)
+    disposers.push(hud.on('valueChanged', (p) => { const v = p as { id?: string; value?: number }; if (v?.id === 'bet-stepper' && typeof v.value === 'number') stores.balance.setBet(v.value); }));
     // ── Spin triggers + turbo speed + autoplay (ALL core-owned) ─────────────────
     // One entry point for every spin: clears the slam-stop flag, then spins from idle.
     const beginSpin = (): void => {
@@ -272,6 +277,41 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     // Turbo speed (2-/3-mode cycler) + slam-stop (tap-to-skip the reels).
     disposers.push(hud.on('turboChanged', (p) => { const e = p as { index?: number }; if (typeof e.index === 'number') turbo.setLevel(e.index); }));
     disposers.push(hud.on('skipRequested', () => turbo.skip()));
+    // Buy-feature: the bonus button opens the lib's feature-LIST modal (a card per buyable
+    // mode). Two kinds of card, both routed through the jurisdiction confirm gate (no one-click
+    // above the threshold):
+    //  • `buy`   → one-shot. On confirm, spin that mode ONCE (SpinPhase charges its full cost).
+    //  • `boost` → a persistent ante. Activating sets it as the ACTIVE mode, so every following
+    //    base spin plays it at its full `cost×` (via `nextMode()`); toggling off restores base.
+    // The modal owns opening/closing/confirm + single-activation; the core supplies the cards +
+    // the onBuy/onActivate hooks and reflects the boosted stake in the bet readout.
+    const features = buyFeaturesOf(opts.config);
+    if (features.length) {
+      // The bet readout shows the EFFECTIVE stake (base × the active ante's cost, emphasised)
+      // while a boost is on, and the plain base bet otherwise — re-applied on bet/mode change.
+      const applyBetDisplay = (): void => {
+        const boost = stores.ui.activeMode;
+        const cost = boost ? modeCostOf(opts.config, boost) : 1;
+        hud!.ui.bet.set(stores.balance.bet * cost);
+        (hud!.ui.bet as unknown as { setEmphasis?: (on: boolean) => void }).setEmphasis?.(cost !== 1);
+      };
+      disposers.push(
+        mountBuyFeatureModal(app, hud, features, {
+          activation: 'single', // one ante at a time (Stake)
+          getBet: () => stores.balance.bet, // the base bet — the readout shows the boosted stake
+          onBuy: (id) => {
+            if (machine.current !== 'idle') return;
+            stores.ui.setOneShotMode(id);
+            beginSpin();
+          },
+          onActivate: (ids) => {
+            stores.ui.setActiveMode(ids[0] ?? null); // persistent ante; nextMode() prefers it
+            applyBetDisplay();
+          },
+        }),
+      );
+      disposers.push(reaction(() => [stores.balance.bet, stores.ui.activeMode] as const, applyBetDisplay));
+    }
     // Keep spinning while autoplay/hold is active: after each settled round (spinning
     // true → false), once idle, pause the (turbo-scaled) gap and spin again — stopping on
     // a blocking notice/error or when the next base stake is unaffordable.
@@ -373,4 +413,21 @@ function errMsg(err: unknown): string {
 /** An AudioSpec (declarative sounds) vs a ready AudioPort/GameAudio instance. */
 function isAudioSpec(a: unknown): a is AudioSpec {
   return !!a && typeof a === 'object' && Array.isArray((a as AudioSpec).sounds);
+}
+
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The buyable/activatable modes (`modes.<key>.buy` / `.boost`) as buy-feature cards — the
+ *  list the bonus button opens. A plain number mode or one without `buy`/`boost` is not a card.
+ *  `cost` in config is the FULL play multiplier (× bet); a boost card shows the SURCHARGE it
+ *  adds over a base spin (`cost − 1`, e.g. a 2× ante → `+1× bet`), so the card + confirm read
+ *  right while the mode is still charged its full `cost` when it spins. */
+function buyFeaturesOf(config: GameConfig): FeatureSpec[] {
+  const out: FeatureSpec[] = [];
+  for (const [key, m] of Object.entries(config.modes ?? {})) {
+    if (!m || typeof m !== 'object' || !(m.buy || m.boost)) continue;
+    const variant = m.boost ? 'boost' : 'buy';
+    out.push({ id: key, name: m.name ?? capitalize(key), variant, cost: variant === 'boost' ? m.cost - 1 : m.cost, image: m.image });
+  }
+  return out;
 }
