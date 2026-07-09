@@ -15,9 +15,9 @@ const paytable: BlockSpec[] = [
 ];
 
 const built = buildRules({
-  intro: 'Match symbols on a line to win — **bigger symbols pay more**.',
+  about: 'Match symbols on a line to win — **bigger symbols pay more**.',
   features: [{ title: 'Wild', text: 'Substitutes for every paying symbol.' }],
-  howToWin: ['Set your bet with the − and + buttons.', 'Press **spin** to play a round.'],
+  howToPlay: ['Set your bet with the − and + buttons.', 'Press **spin** to play a round.'],
   paytable,
   // These MUST match your certified math report.
   stats: { rtp: '96.00%', volatility: 'Medium', maxWin: '5,000×' },

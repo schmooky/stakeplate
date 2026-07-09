@@ -1,8 +1,18 @@
 {
   "name": "create-stakeplate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scaffold a Stake Engine slot game on @stakeplate/core — `npm create stakeplate@latest`",
-  "keywords": ["stake", "stake-engine", "slot", "slots", "igaming", "scaffold", "create", "stakeplate", "pixijs"],
+  "keywords": [
+    "stake",
+    "stake-engine",
+    "slot",
+    "slots",
+    "igaming",
+    "scaffold",
+    "create",
+    "stakeplate",
+    "pixijs"
+  ],
   "license": "MIT",
   "author": "schmooky and the stakeplate contributors",
   "homepage": "https://github.com/schmooky/stakeplate/tree/main/packages/create-stakeplate#readme",
