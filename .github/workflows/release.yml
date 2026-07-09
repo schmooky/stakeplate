@@ -36,8 +36,10 @@ jobs:
           cache: pnpm
           # Do NOT set registry-url — it would seed a placeholder token and skip OIDC.
 
-      # OIDC trusted publishing needs npm >= 11.5.1 (Node 22 ships 10.9).
-      - run: npm install -g npm@latest
+      # OIDC trusted publishing needs npm >= 11.5.1 (Node 22 ships 10.9). Pin an exact
+      # version — `npm@latest` regressed sigstore/provenance (broke the open-slot-ui 0.8.1
+      # release: "Cannot find module 'sigstore'"); 11.5.2 is known-good.
+      - run: npm install -g npm@11.5.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
       - run: pnpm -r typecheck
