@@ -29,7 +29,8 @@ const audio = createGameAudio();
 const present: Phase<Data, Scene, Ev> = {
   name: 'present',
   async enter(ctx) {
-    if (ctx.round) await ctx.view.play(ctx.round.data.grid, ctx.round.data.win);
+    // ctx.turbo.delay drives the spin duration → turbo speed + slam-stop for free.
+    if (ctx.round) await ctx.view.play(ctx.round.data.grid, ctx.round.data.win, (ms) => ctx.turbo.delay(ms));
     await ctx.fsm.transition('settle');
   },
 };

@@ -180,7 +180,9 @@ type InterpretBook<T, E> = (raw: Round<E>, info: RoundInfo) => T;
 | Юрисдикция, `minimumRoundDuration`, RGS-код → модалка, `reportRound`/net | **ядро** связывает, HUD показывает |
 | Белый набор иконок HUD по умолчанию (спин/турбо/автоплей/±, spin-skin) | **ядро** подключает `loadBuiltinArt()` |
 | Аудио-шины + бинд на слайдеры/mute HUD + дакинг + preload | **ядро** на `@schmooky/zvuk` |
-| Валюта/соц-режим/buy-confirm/скрытый fullscreen/max-win/replay+error UI/автоплей | **HUD** (`@open-slot-ui`) |
+| **Автоплей-цикл** (крутит N раз, стоп по счётчику/RG-лимитам/недостатку баланса/модалке), **hold-to-spin** | **ядро** ведёт, HUD владеет счётчиком/лимитами |
+| **Турбо-скорость** (2/3-режима → множитель) + **slam-stop** (тап → мгновенно) — через `ctx.turbo.delay` | **ядро** |
+| Валюта/соц-режим/buy-confirm/скрытый fullscreen/max-win/replay+error UI, пикер автоплея | **HUD** (`@open-slot-ui`) |
 | `interpretBook`, сцена + презентер, фаза Present, тексты правил, звуки, математика | **игра** |
 
 ---

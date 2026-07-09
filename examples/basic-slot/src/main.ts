@@ -34,7 +34,8 @@ const present: Phase<Data, MiniSlot, Ev> = {
     if (!musicStarted) { musicStarted = true; ctx.audio?.music('base', { fadeIn: 0.8 }); } // seamless loop
     const r = ctx.round;
     if (r?.data.win) ctx.audio?.play('win', { bus: 'wins' });
-    if (r) await ctx.view.play(r.data.grid, r.data.win);
+    // ctx.turbo.delay drives the spin duration → turbo speed + slam-stop for free.
+    if (r) await ctx.view.play(r.data.grid, r.data.win, (ms) => ctx.turbo.delay(ms));
     await ctx.fsm.transition('settle');
   },
 };
@@ -52,9 +53,11 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
     const ev = roundEvents(raw)[0];
     return { grid: ev?.grid ?? [[], [], []], win: info.totalWin > 0 };
   },
-  mountView: (host) => {
+  mountView: (host, ctx) => {
     const scene = new MiniSlot(host);
     (window as unknown as { __SCENE__: MiniSlot }).__SCENE__ = scene; // dev/harness handle
+    (window as unknown as { __HUD__: unknown }).__HUD__ = ctx.hud; // dev/harness handle
+    (window as unknown as { __TURBO__: unknown }).__TURBO__ = ctx.turbo; // dev/harness handle
     return scene;
   },
   phases: [present],

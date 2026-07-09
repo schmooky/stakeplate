@@ -109,11 +109,13 @@ export class MiniSlot {
       }
   }
 
-  /** Spin the reels briefly, then land on `grid`; highlight tiles if this was a win. */
-  async play(grid: string[][], win: boolean): Promise<void> {
+  /**
+   * Spin the reels, then land on `grid`; highlight tiles on a win. The spin DURATION is the
+   * injected `wait` — pass `ctx.turbo.delay` so the core's turbo speed + slam-stop drive it
+   * (and the round always resolves, even when the tab is hidden and rAF is paused).
+   */
+  async play(grid: string[][], win: boolean, wait: (ms: number) => Promise<void>): Promise<void> {
     await this.ready;
-    // Shuffle symbols for the visual (rAF pauses when the tab is hidden — that's fine),
-    // but gate the round's completion on a timer so it always resolves, visible or not.
     let spinning = true;
     const shuffle = (): void => {
       if (!spinning) return;
@@ -121,7 +123,7 @@ export class MiniSlot {
       requestAnimationFrame(shuffle);
     };
     shuffle();
-    await new Promise<void>((resolve) => setTimeout(resolve, 650));
+    await wait(650);
     spinning = false;
     for (let c = 0; c < 3; c++)
       for (let r = 0; r < 3; r++) {

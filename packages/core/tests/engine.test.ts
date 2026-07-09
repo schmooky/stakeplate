@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FSM, defaultPhases, type PhaseContext } from '../src/engine/index';
 import { InstantTicker } from '../src/engine/ticker';
+import { TurboClock } from '../src/engine/turbo';
 import { RootStore } from '../src/stores/index';
 import { MockNetworkManager } from '../src/rgs/MockNetworkManager';
 import type { NetworkManager } from '../src/rgs/network';
@@ -24,6 +25,7 @@ function makeGame(net: NetworkManager, balance = 100): { stores: RootStore; hud:
     ticker: new InstantTicker(),
     view: null,
     audio: null,
+    turbo: new TurboClock(),
     interpretBook: (_raw, info) => ({ won: info.totalWin }),
     fsm,
     round: null,

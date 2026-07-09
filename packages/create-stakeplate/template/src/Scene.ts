@@ -84,8 +84,11 @@ export class Scene {
       }
   }
 
-  /** Spin the reels briefly, then land on `grid`; highlight the tiles if this was a win. */
-  async play(grid: string[][], win: boolean): Promise<void> {
+  /**
+   * Spin the reels, then land on `grid`; highlight the tiles on a win. The spin DURATION is
+   * the injected `wait` — pass `ctx.turbo.delay` so the core's turbo speed + slam-stop drive it.
+   */
+  async play(grid: string[][], win: boolean, wait: (ms: number) => Promise<void>): Promise<void> {
     await this.ready;
     let spinning = true;
     const shuffle = (): void => {
@@ -94,7 +97,7 @@ export class Scene {
       requestAnimationFrame(shuffle);
     };
     shuffle();
-    await new Promise<void>((res) => setTimeout(res, 650));
+    await wait(650);
     spinning = false;
     for (let c = 0; c < 3; c++)
       for (let r = 0; r < 3; r++) {

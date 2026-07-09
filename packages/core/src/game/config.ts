@@ -23,6 +23,10 @@ export interface GameConfig {
   modes?: Record<string, ModeConfig | number>;
   /** Rules blocks for the HUD menu (`@open-slot-ui` `BlockSpec[]` / `MenuSpec`) — opaque here. */
   rules?: unknown;
+  /** Delay multipliers per turbo level (off / turbo / super). Default `[1, 0.4, 0.12]`. */
+  turboSpeeds?: number[];
+  /** Pause (ms) between autoplay/hold spins. Default 250. Scales with turbo. */
+  autoplayGapMs?: number;
   /** Extra `@open-slot-ui` `UISpec` fields merged into the built spec (escape hatch). */
   spec?: Record<string, unknown>;
 }

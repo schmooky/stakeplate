@@ -7,6 +7,7 @@
 import type { NetworkManager } from '../rgs/network';
 import type { RootStore } from '../stores/index';
 import type { Ticker } from './ticker';
+import type { TurboState } from './turbo';
 import type { HudPort } from './hud-port';
 import type { GameRound, InterpretBook } from './round';
 import type { GameConfig } from '../game/config';
@@ -29,6 +30,8 @@ export interface PhaseContext<T = unknown, V = unknown, E = unknown> {
   /** The game's mounted view (scene/presenter/stores) — whatever `mountView` returned. */
   readonly view: V;
   readonly audio: AudioPort | null;
+  /** Turbo speed + slam-stop (core-owned). Use `ctx.turbo.delay(ms)` for spin/anim timing. */
+  readonly turbo: TurboState;
   readonly interpretBook: InterpretBook<T, E>;
   readonly fsm: FSM<T, V, E>;
   round: GameRound<T, E> | null;

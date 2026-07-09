@@ -15,6 +15,7 @@ import { createNetwork, type NetworkManager } from '../rgs/network';
 import { API_AMOUNT_MULTIPLIER, type Round } from '../rgs/protocol';
 import { RootStore } from '../stores/index';
 import { RealTicker, type Ticker } from '../engine/ticker';
+import { TurboClock, type TurboState } from '../engine/turbo';
 import { FSM, type AudioPort, type Phase, type PhaseContext } from '../engine/fsm';
 import { defaultPhases } from '../engine/phases';
 import { roundInfo, type InterpretBook } from '../engine/round';
@@ -39,6 +40,8 @@ export interface ViewContext {
   hud: BootedHud;
   ticker: Ticker;
   audio: AudioPort | null;
+  /** Turbo speed + slam-stop (core-owned) — the scene may branch on `turbo.level`/`speed`. */
+  turbo: TurboState;
 }
 
 export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
@@ -104,6 +107,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
   const network = opts.network ?? createNetwork(runtime);
   const stores = new RootStore();
   const ticker = new RealTicker();
+  const turbo = new TurboClock(opts.config.turboSpeeds); // core-owned turbo speed + slam-stop
   // A ready AudioPort instance is used as-is; an AudioSpec is resolved lazily in start()
   // (the core creates the zvuk mixer from its own async chunk) — see resolveAudio().
   let audio: AudioPort | null = opts.audio && !isAudioSpec(opts.audio) ? opts.audio : null;
@@ -178,7 +182,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
         stores.balance.setBalance(0);
         stores.balance.setBet(bet);
         if (runtime.social) hud.setSocial(true);
-        const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio });
+        const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo });
         hud.setReplay(true);
         hud.lockInput();
         const cost = modeCostOf(opts.config, runtime.replay.mode);
@@ -241,13 +245,51 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     stores.balance.setBet(defaultBet);
     hud.setBet(defaultBet);
 
-    const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio });
+    const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo });
     const ctx = makeCtx(machine, view);
 
     // reactions store→HUD + HUD events
     disposers.push(reaction(() => stores.balance.balance, (b) => hud!.setBalance(b), { fireImmediately: false }));
     disposers.push(hud.on('valueChanged', (p) => { const v = p as { id?: string; value?: number }; if (v?.id === 'bet' && typeof v.value === 'number') stores.balance.setBet(v.value); }));
-    disposers.push(hud.on('spinRequested', () => { if (machine.current === 'idle') void machine.transition('spin'); }));
+    // ── Spin triggers + turbo speed + autoplay (ALL core-owned) ─────────────────
+    // One entry point for every spin: clears the slam-stop flag, then spins from idle.
+    const beginSpin = (): void => {
+      if (machine.current !== 'idle') return;
+      turbo.resetSkip();
+      void machine.transition('spin');
+    };
+    let holdActive = false; // press-and-hold turbo spin
+    disposers.push(hud.on('spinRequested', beginSpin));
+    // Autoplay/hold: the HUD owns the count picker, remaining count + RG limits (via
+    // reportRound); the CORE runs the loop. Start on the first tick, then re-spin below.
+    disposers.push(hud.on('autoplayStarted', beginSpin));
+    disposers.push(hud.on('holdSpinStarted', () => { holdActive = true; beginSpin(); }));
+    disposers.push(hud.on('holdSpinStopped', () => { holdActive = false; }));
+    // Turbo speed (2-/3-mode cycler) + slam-stop (tap-to-skip the reels).
+    disposers.push(hud.on('turboChanged', (p) => { const e = p as { index?: number }; if (typeof e.index === 'number') turbo.setLevel(e.index); }));
+    disposers.push(hud.on('skipRequested', () => turbo.skip()));
+    // Keep spinning while autoplay/hold is active: after each settled round (spinning
+    // true → false), once idle, pause the (turbo-scaled) gap and spin again — stopping on
+    // a blocking notice/error or when the next base stake is unaffordable.
+    const autoplayGapMs = opts.config.autoplayGapMs ?? 250;
+    disposers.push(
+      reaction(
+        () => stores.ui.spinning,
+        (spinning, prev) => {
+          if (prev !== true || spinning !== false) return;
+          void turbo.delay(autoplayGapMs).then(() => {
+            if (machine.current !== 'idle') return;
+            if (!hud!.ui.autoplay.isActive && !holdActive) return;
+            if (hud!.ui.noticeBlocks.get().length > 0 || stores.balance.balance < stores.balance.bet) {
+              hud!.ui.autoplay.stop();
+              holdActive = false;
+              return;
+            }
+            beginSpin();
+          });
+        },
+      ),
+    );
 
     // Auto-wire audio ↔ HUD (Music/Effects sliders + mute, persisted) + unlock on the first
     // spin gesture — IF a mixer-like `audio` was provided. Structural check, no @schmooky/zvuk
@@ -284,6 +326,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
       ticker,
       view,
       audio,
+      turbo,
       interpretBook: opts.interpretBook,
       fsm,
       round: null,
