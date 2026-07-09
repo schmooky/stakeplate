@@ -16,7 +16,9 @@ interface Tile {
 export class MiniSlot {
   readonly app = new Application();
   private readonly root = new Container();
-  /** The highlighted rectangle the reels are contain-fitted into + its label. */
+  /** Checkered grey background, its grid intersection centred on the fit-scale area. */
+  private readonly bg = new Graphics();
+  /** The 1px rectangle the reels are contain-fitted into + its label. */
   private readonly fitArea = new Graphics();
   private readonly fitLabel = new Text({ text: 'fit-scale area', style: { fontSize: 13, fontFamily: 'system-ui', fontWeight: '700', fill: 0xffc935 } });
   private readonly tiles: Tile[][] = [];
@@ -31,7 +33,8 @@ export class MiniSlot {
     await this.app.init({ background: 0x141821, antialias: true, resolution: Math.min(window.devicePixelRatio || 1, 2), autoDensity: true });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.root);
-    this.root.addChild(this.fitArea); // behind the reels
+    this.root.addChild(this.bg); // checkered background, behind everything
+    this.root.addChild(this.fitArea);
     for (let c = 0; c < 3; c++) {
       this.tiles[c] = [];
       for (let r = 0; r < 3; r++) {
@@ -65,11 +68,25 @@ export class MiniSlot {
     resize();
   }
 
-  private drawTile(t: Tile, win: boolean): void {
+  private drawTile(t: Tile): void {
     const s = this.size;
-    t.bg.clear().roundRect(0, 0, s, s, s * 0.14).fill(win ? 0x2a2213 : 0x1e2530).stroke({ width: 3, color: win ? 0xffc935 : 0x3a4658 });
+    t.bg.clear(); // no frame / outline on the symbols
     t.txt.position.set(s / 2, s / 2);
     t.txt.style.fontSize = s * 0.5;
+  }
+
+  /** Checkered grey grid (50px cells) whose intersection sits at the fit-area centre. */
+  private drawCheckerboard(cx: number, cy: number, W: number, H: number): void {
+    const S = 50;
+    const g = this.bg.clear();
+    const ox = cx - Math.ceil(cx / S) * S; // a grid corner ≤ 0, so (cx,cy) is an intersection
+    const oy = cy - Math.ceil(cy / S) * S;
+    for (let x = ox; x < W; x += S) {
+      for (let y = oy; y < H; y += S) {
+        const even = ((Math.round((x - cx) / S) + Math.round((y - cy) / S)) & 1) === 0;
+        g.rect(x, y, S, S).fill(even ? 0x181c24 : 0x1e232d);
+      }
+    }
   }
 
   private layout(): void {
@@ -94,18 +111,16 @@ export class MiniSlot {
     const x0 = areaX + (areaW - gridW) / 2;
     const y0 = areaY + (areaH - gridH) / 2;
 
-    this.fitArea
-      .clear()
-      .roundRect(areaX, areaY, areaW, areaH, 14)
-      .fill({ color: 0xffc935, alpha: 0.06 })
-      .stroke({ width: 2, color: 0xffc935, alpha: 0.7 });
+    this.drawCheckerboard(areaX + areaW / 2, areaY + areaH / 2, W, H);
+    // A 1px sharp-cornered rectangle (no fill, no rounding).
+    this.fitArea.clear().rect(areaX, areaY, areaW, areaH).stroke({ width: 1, color: 0xffc935, alpha: 0.9 });
     this.fitLabel.position.set(areaX + 10, areaY + 8);
 
     for (let c = 0; c < 3; c++)
       for (let r = 0; r < 3; r++) {
         const t = this.tiles[c]![r]!;
         t.cell.position.set(x0 + c * (this.size + gap), y0 + r * (this.size + gap));
-        this.drawTile(t, false);
+        this.drawTile(t);
       }
   }
 
@@ -129,11 +144,11 @@ export class MiniSlot {
       for (let r = 0; r < 3; r++) {
         const t = this.tiles[c]![r]!;
         t.txt.text = grid[c]?.[r] ?? rnd(SYMBOLS);
-        this.drawTile(t, win);
+        this.drawTile(t);
       }
   }
 
   reset(): void {
-    for (const col of this.tiles) for (const t of col) this.drawTile(t, false);
+    for (const col of this.tiles) for (const t of col) this.drawTile(t);
   }
 }
