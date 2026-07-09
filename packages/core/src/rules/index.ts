@@ -23,6 +23,9 @@ export interface RulesStats {
 }
 
 export interface BuildRulesOptions {
+  /** How Settings exposes sound: a `'toggle'` only · `'master'` slider · `'sliders'`
+   *  (Music + Effects). Default `'sliders'`. */
+  sound?: 'toggle' | 'master' | 'sliders';
   /** An "About the game" intro paragraph. */
   about?: string;
   /** "How to play" steps. */
@@ -124,6 +127,7 @@ export function buildRules(opts: BuildRulesOptions = {}): BuiltRules {
   }
 
   const menu: MenuSpec = {
+    ...(opts.sound ? { sound: opts.sound } : {}),
     ...(opts.paytable ? { paytable: opts.paytable } : {}),
     rules,
   };
