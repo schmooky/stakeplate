@@ -19,10 +19,10 @@ importers:
         version: link:../../packages/stake-protocol
       '@open-slot-ui/core':
         specifier: ^0.2.0
-        version: 0.2.0
+        version: 0.2.4
       '@open-slot-ui/pixi':
         specifier: ^0.2.0
-        version: 0.2.0(pixi.js@8.19.0)
+        version: 0.2.4(pixi.js@8.19.0)
       cannon-es:
         specifier: ^0.20.0
         version: 0.20.0
@@ -99,10 +99,10 @@ importers:
         version: link:../../packages/stake-protocol
       '@open-slot-ui/core':
         specifier: ^0.2.0
-        version: 0.2.0
+        version: 0.2.4
       '@open-slot-ui/pixi':
         specifier: ^0.2.0
-        version: 0.2.0(pixi.js@8.19.0)
+        version: 0.2.4(pixi.js@8.19.0)
       gsap:
         specifier: ^3.13.0
         version: 3.15.0
@@ -178,11 +178,11 @@ importers:
   examples/basic-slot:
     dependencies:
       '@open-slot-ui/core':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.8.1
+        version: 0.8.1
       '@open-slot-ui/pixi':
-        specifier: ^0.7.1
-        version: 0.7.1(pixi.js@8.19.0)
+        specifier: ^0.8.1
+        version: 0.8.1(pixi.js@8.19.0)
       '@stakeplate/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -210,11 +210,11 @@ importers:
         version: 1.1.0(gsap@3.15.0)(pixi.js@8.19.0)
     devDependencies:
       '@open-slot-ui/core':
-        specifier: ^0.7.1
-        version: 0.7.1
+        specifier: ^0.8.1
+        version: 0.8.1
       '@open-slot-ui/pixi':
-        specifier: ^0.7.1
-        version: 0.7.1(pixi.js@8.19.0)
+        specifier: ^0.8.1
+        version: 0.8.1(pixi.js@8.19.0)
       '@schmooky/zvuk':
         specifier: ^1.13.0
         version: 1.13.0
@@ -1381,22 +1381,22 @@ packages:
     resolution: {integrity: sha512-+llXfqt+UzgoDzT9of5vPQPGqTAVCohU74I9zIBkNo5TH6s2P31DFJOGsJQKN207f0GHnYv5pV3wh3BCY/un/A==}
     engines: {node: '>= 10'}
 
-  '@open-slot-ui/core@0.2.0':
-    resolution: {integrity: sha512-S8Ga3t6CR2nsZwedDBoiWeQQkHgIP56c/MS55vQcsvt3FUqQI6UwVAoa1TUXdNbLNZMX2yTlnl5p0xcDObSjuQ==}
+  '@open-slot-ui/core@0.2.4':
+    resolution: {integrity: sha512-ev3j0RHOMPCKi7NcL2PKRqwFxwelKhyBkau8Bzsboc6NO4HttaV6HzOX7oCJuihXDAV1fQtVdYCXjYa++1kXNw==}
     engines: {node: '>=18'}
 
-  '@open-slot-ui/core@0.7.1':
-    resolution: {integrity: sha512-2bHZmyKdEo3WWzLao5Gdsxy+QgH8QLVV3SCuc3XjSjTaXVkHJ4PGaYaMfzeP+vXMtlnxt0QrqZczOoZLTHapxw==}
+  '@open-slot-ui/core@0.8.1':
+    resolution: {integrity: sha512-vh/9+k3L0YGpj0CEsicF8zaxiTuk22/Bmet+yG9a0eNzs6f3jVlP4lY8D6/cErj3GZmLJjDXch8ceEy90KPKrw==}
     engines: {node: '>=18'}
 
-  '@open-slot-ui/pixi@0.2.0':
-    resolution: {integrity: sha512-fqFEbgkPYASuBHikqJtkypfm1wSBXJDSeUq3bkaKqC2zqT20DiKMW6VTFlD1/jEjGg6O5tVR6Nl+2clYu5bZeg==}
+  '@open-slot-ui/pixi@0.2.4':
+    resolution: {integrity: sha512-+vmBLgw9Hue4U0pP1DP2dnYd2WrrZSUIodYI+B24xBCI+OeRl0fdIhiPsXkCogoLyCeYyKdngIh5QKHTkz4+Iw==}
     engines: {node: '>=18'}
     peerDependencies:
       pixi.js: ^8
 
-  '@open-slot-ui/pixi@0.7.1':
-    resolution: {integrity: sha512-Dba1Bkwx/PX8w604kCu1uK6M5dZL5YuftBQi2szAJsIW8FCM3fISzCVnczpMXJ8ATF607FH5aKEXzXYwHJFAHQ==}
+  '@open-slot-ui/pixi@0.8.1':
+    resolution: {integrity: sha512-nPy+DV5nwP8Kart4REe6rWCWBptKMbTllgJoi6haauXVxZmRz3PAaNe4JYIEfpN2yTg0e0Jq4X9VjR9vib5qRg==}
     engines: {node: '>=18'}
     peerDependencies:
       pixi.js: ^8
@@ -4421,18 +4421,18 @@ snapshots:
       '@node-rs/crc32-win32-ia32-msvc': 1.10.6
       '@node-rs/crc32-win32-x64-msvc': 1.10.6
 
-  '@open-slot-ui/core@0.2.0': {}
+  '@open-slot-ui/core@0.2.4': {}
 
-  '@open-slot-ui/core@0.7.1': {}
+  '@open-slot-ui/core@0.8.1': {}
 
-  '@open-slot-ui/pixi@0.2.0(pixi.js@8.19.0)':
+  '@open-slot-ui/pixi@0.2.4(pixi.js@8.19.0)':
     dependencies:
-      '@open-slot-ui/core': 0.2.0
+      '@open-slot-ui/core': 0.2.4
       pixi.js: 8.19.0
 
-  '@open-slot-ui/pixi@0.7.1(pixi.js@8.19.0)':
+  '@open-slot-ui/pixi@0.8.1(pixi.js@8.19.0)':
     dependencies:
-      '@open-slot-ui/core': 0.7.1
+      '@open-slot-ui/core': 0.8.1
       pixi.js: 8.19.0
 
   '@oxc-project/types@0.139.0': {}
