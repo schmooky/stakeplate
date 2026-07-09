@@ -51,7 +51,15 @@
 
 ## 3. Быстрый старт
 
-Вся игра — один вызов `createStakeGame` (пример из `examples/basic-slot`):
+Новую игру создаёт скаффолдер — compliant-скелет (хосты `#hud`/`#scene`/`#boot`,
+`vite.config` с `base:'./'`+dedupe, `tsconfig`, сцена, демо-RGS) за одну команду:
+
+```bash
+npm create stakeplate@latest my-game
+cd my-game && npm install && npm run dev   # грузится + крутится на локальном моке RGS
+```
+
+Внутри — та же одна точка входа `createStakeGame` (пример из `examples/basic-slot`):
 
 ```ts
 import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';

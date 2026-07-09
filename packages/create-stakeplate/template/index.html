@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>{{name}}</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f14; font-family: system-ui, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      /* Scene canvas behind, transparent HUD canvas in front. */
+      #scene, #hud { position: absolute; inset: 0; }
+      #hud { pointer-events: none; }
+      #hud canvas { pointer-events: auto; }
+      /* Boot splash — the core hides it (data-done) once authenticate + HUD are up. */
+      #boot { position: absolute; inset: 0; display: grid; place-items: center; color: #ffc935; font-size: 20px; font-weight: 700; letter-spacing: 1px; transition: opacity .3s; }
+      #boot[data-done="1"] { opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="scene"></div>
+      <div id="hud"></div>
+      <div id="boot">LOADING…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
