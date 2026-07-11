@@ -16,6 +16,13 @@ import type { GameConfig } from '../game/config';
  *  zvuk's `VoiceJitter` without importing it, so the engine stays zvuk-free. */
 export type AudioValue = number | { base?: number; jitter?: number };
 
+/** The minimal boot-loader surface a game's phases touch (satisfied by the core's
+ *  `GameLoader`) — kept structural so the engine needn't import the loader module. */
+export interface LoaderPort {
+  setProgress(p: number): void;
+  done(): Promise<void>;
+}
+
 /** The minimal audio surface a game's phases call (satisfied by `@stakeplate/core/audio`). */
 export interface AudioPort {
   /** Fire a one-shot. `volume`/`pitch` accept jitter so repeated cues vary per voice. */
@@ -37,6 +44,8 @@ export interface PhaseContext<T = unknown, V = unknown, E = unknown> {
   readonly audio: AudioPort | null;
   /** Turbo speed + slam-stop (core-owned). Use `ctx.turbo.delay(ms)` for spin/anim timing. */
   readonly turbo: TurboState;
+  /** The boot loader, if one was configured (else `null`) — drive progress / `done()`. */
+  readonly loader: LoaderPort | null;
   readonly interpretBook: InterpretBook<T, E>;
   readonly fsm: FSM<T, V, E>;
   round: GameRound<T, E> | null;

@@ -23,6 +23,7 @@ import { roundInfo, type InterpretBook } from '../engine/round';
 import { bindMixerToHud, type MixerLike } from '../audio/bind';
 import { bindInputSounds, type InputSoundMap } from '../audio/inputs';
 import type { GameAudioOptions, SoundEntry } from '../audio';
+import { createLoader, type GameLoader, type LoaderConfig } from '../loader';
 import { modeCostOf, type GameConfig } from './config';
 
 /**
@@ -47,6 +48,10 @@ export interface ViewContext {
   audio: AudioPort | null;
   /** Turbo speed + slam-stop (core-owned) — the scene may branch on `turbo.level`/`speed`. */
   turbo: TurboState;
+  /** The boot loader (if `loader` was configured) — drive `setProgress` while your scene
+   *  loads art, and (with `loader.manual`) call `done()` when the scene is ready. `null`
+   *  when no loader is used. */
+  loader: GameLoader | null;
 }
 
 export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
@@ -69,6 +74,14 @@ export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
   sceneHost?: HTMLElement;
   /** Passthrough to `mountHud` (spinSkin, icons, gsap, menu:false, hooks, …). */
   hudOptions?: Record<string, unknown>;
+  /**
+   * A configurable boot loader — shows the instant boot starts, advances across the boot
+   * milestones, then fills + pops away when the game is ready. Pass a {@link LoaderConfig}
+   * to enable it (title defaults to `config.title`); omit or `false` to render none (the
+   * game keeps its own HTML loader). With `manual: true`, call `ctx.loader.done()` yourself
+   * (e.g. after the scene's art finishes loading).
+   */
+  loader?: LoaderConfig | false;
 }
 
 /**
@@ -120,6 +133,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
   const disposers: Array<() => void> = [];
   let hud: BootedHud | null = null;
   let fsm: FSM<T, V, E> | null = null;
+  let loader: GameLoader | null = null;
 
   // The battery wires the library's DESIGNED default icon set (the white Figma coins +
   // rotating-arrows spin skin) so every game gets the intended HUD out of the box — not
@@ -177,14 +191,21 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
   async function start(): Promise<void> {
     const hudHost = opts.hudHost ?? document.body;
     const sceneHost = opts.sceneHost ?? hudHost;
+    // Boot loader: paint it BEFORE anything heavy loads, then advance it across the milestones
+    // below (init → auth → HUD → view) and fill + pop it away once the game is ready. `false`
+    // (the default) renders none, so a game keeps whatever loader its HTML already has.
+    if (opts.loader) loader = createLoader({ title: opts.config.title, ...opts.loader });
+    const manualLoader = !!(opts.loader && opts.loader.manual);
     const phases = [...defaultPhases<T, V, E>(), ...(opts.phases ?? [])];
     const machine = (fsm = new FSM<T, V, E>(phases)); // outer `fsm` powers inspect()/requestSpin()
+    loader?.setProgress(0.1);
     await resolveAudio(); // if `audio` is an AudioSpec, build the zvuk mixer (lazy chunk) + preload
 
     // ── REPLAY (Stake ?replay=true): fetch a round + play it back read-only ──────
     if (runtime.replay.active && network.replay) {
       try {
         await initApp(hudHost);
+        loader?.setProgress(0.5);
         const cur = runtime.currency;
         const bet = runtime.replay.amount || 1; // replay carries its own bet; no ladder needed
         hud = mountHud(app, buildSpec({ currency: cur, betLevels: [bet], defaultBet: bet, rtp: opts.config.rtp ?? 96, confirmBuyAboveCost: STAKE_CONFIRM_ABOVE_COST }), (await hudOpts()) as never);
@@ -192,7 +213,8 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
         stores.balance.setBalance(0);
         stores.balance.setBet(bet);
         if (runtime.social) hud.setSocial(true);
-        const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo });
+        loader?.setProgress(0.85);
+        const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo, loader });
         hud.setReplay(true);
         hud.lockInput();
         const cost = modeCostOf(opts.config, runtime.replay.mode);
@@ -207,7 +229,9 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
           hud!.replayEnd(replayInfo, () => void playRound());
         };
         hud.replayStart(replayInfo, () => void playRound());
+        if (!manualLoader) void loader?.done();
       } catch (err) {
+        loader?.remove();
         showBootError({ title: 'Cannot load the replay', message: 'The recorded round could not be loaded. Please reload to try again.', detail: errMsg(err) });
       }
       return;
@@ -217,8 +241,11 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     let auth;
     try {
       await initApp(hudHost);
+      loader?.setProgress(0.35);
       auth = await network.authenticate();
+      loader?.setProgress(0.6);
     } catch (err) {
+      loader?.remove();
       showBootError({
         title: 'Cannot reach the game server',
         message: 'The game could not connect to or authenticate with the game server. Please reload to try again.',
@@ -254,9 +281,11 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     });
     stores.balance.setBet(defaultBet);
     hud.setBet(defaultBet);
+    loader?.setProgress(0.8);
 
-    const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo });
+    const view = opts.mountView(sceneHost, { config: opts.config, stores, hud, ticker, audio, turbo, loader });
     const ctx = makeCtx(machine, view);
+    loader?.setProgress(0.95);
 
     // reactions store→HUD + HUD events
     disposers.push(reaction(() => stores.balance.balance, (b) => hud!.setBalance(b), { fireImmediately: false }));
@@ -371,6 +400,9 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
       stores.balance.setBalance(auth.balance.amount / API_AMOUNT_MULTIPLIER);
       await machine.transition('idle');
     }
+    // The game is booted + interactive → fill + pop the loader away (unless the game asked
+    // to drive it manually, e.g. to wait for its scene art via `ctx.loader.done()`).
+    if (!manualLoader) void loader?.done();
   }
 
   function makeCtx(fsm: FSM<T, V, E>, view: V): PhaseContext<T, V, E> {
@@ -383,6 +415,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
       view,
       audio,
       turbo,
+      loader,
       interpretBook: opts.interpretBook,
       fsm,
       round: null,

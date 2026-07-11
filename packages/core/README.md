@@ -69,6 +69,10 @@ config.socialMessages = { en: built.socialEn }; // auto-derived social wording
   stripped) with `scripts/encode-audio.sh OUTDIR raw/*.wav`, then load the pair with
   `{ url: ['clip.webm', 'clip.mp3'] }`.
 - `@stakeplate/core/rules` — `buildRules` compliant menu + `toSocial`/`findRestricted` + dict.
+- Boot loader — pass `loader: { title, backgroundImage, logo, accent, … }` to `createStakeGame`
+  for a configurable loading screen (pulsing logo/spinner + progress bar over your backdrop)
+  that shows before anything heavy loads and pops away when ready. `manual: true` +
+  `ctx.loader.done()` to hold it until your scene's art is in. `createLoader()` is also standalone.
 - `@stakeplate/core/stores` — the MobX stores (balance, ui) for composing game state.
 - `@stakeplate/core/testing` — the mock RGS, scriptable network, instant ticker.
 - (soon) `/scene`, `/i18n`.
