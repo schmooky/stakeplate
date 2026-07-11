@@ -215,6 +215,9 @@ importers:
       '@schmooky/zvuk':
         specifier: ^1.13.0
         version: 1.13.0
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
       pixi.js:
         specifier: ^8
         version: 8.19.0

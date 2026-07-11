@@ -12,9 +12,12 @@ export default defineConfig({
     audio: 'src/audio/index.ts',
     testing: 'src/testing/index.ts',
     rules: 'src/rules/index.ts',
+    vite: 'src/vite.ts', // Node-only build helper (the boot-bg inliner) — not shipped to the browser
   },
   format: ['esm'],
   platform: 'neutral',
+  // The `vite` entry is Node-only — keep node builtins + the optional `sharp` external.
+  external: [/^node:/, 'sharp'],
   dts: true,
   sourcemap: true,
   clean: true,

@@ -96,7 +96,7 @@ export function createLoader(config: LoaderConfig = {}): GameLoader {
 
   const style = document.createElement('style');
   style.textContent = `
-    #${id}{position:fixed;inset:0;z-index:${z};background:${bg};overflow:hidden;
+    #${id}{position:fixed;inset:0;z-index:${z};background:${config.backgroundImage ? 'transparent' : bg};overflow:hidden;
       font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
       opacity:1;transition:opacity .5s ease}
     #${id}.sp-done{opacity:0}
@@ -228,6 +228,10 @@ export function createLoader(config: LoaderConfig = {}): GameLoader {
   const remove = (): void => {
     root.remove();
     style.remove();
+    // Clean up the build-time boot backdrop injected by the `stakeplateBoot` Vite plugin
+    // (if present) — the game is now covering it.
+    document.getElementById('sp-bootbg')?.remove();
+    document.getElementById('sp-boot-style')?.remove();
   };
 
   // Transition LOADING → FEATURES, then resolve once the player dismisses it.

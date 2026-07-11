@@ -69,10 +69,15 @@ config.socialMessages = { en: built.socialEn }; // auto-derived social wording
   stripped) with `scripts/encode-audio.sh OUTDIR raw/*.wav`, then load the pair with
   `{ url: ['clip.webm', 'clip.mp3'] }`.
 - `@stakeplate/core/rules` — `buildRules` compliant menu + `toSocial`/`findRestricted` + dict.
-- Boot loader — pass `loader: { title, backgroundImage, logo, accent, … }` to `createStakeGame`
-  for a configurable loading screen (pulsing logo/spinner + progress bar over your backdrop)
-  that shows before anything heavy loads and pops away when ready. `manual: true` +
-  `ctx.loader.done()` to hold it until your scene's art is in. `createLoader()` is also standalone.
+- Boot loader — pass `loader: { title, backgroundImage, logo, accent, features, … }` to
+  `createStakeGame` for a `loader → features → idle` flow: a loading screen (pulsing
+  logo/spinner + progress bar) that, with `features: [{ image, text }]`, glides the logo up
+  and fades in a feature splash (tap to continue), then reveals the game. `manual: true` +
+  `ctx.loader.done()` holds it until your scene's art is in. `createLoader()` is standalone.
+- `@stakeplate/core/vite` — `stakeplateBoot({ background })` Vite plugin that inlines a
+  blurred placeholder of the loader backdrop into index.html at build time, so the FIRST
+  paint shows the backdrop — no black flash before the JS loads. (Add `sharp` as a
+  devDependency for the blurred image; without it the solid colour is inlined — still never black.)
 - `@stakeplate/core/stores` — the MobX stores (balance, ui) for composing game state.
 - `@stakeplate/core/testing` — the mock RGS, scriptable network, instant ticker.
 - (soon) `/scene`, `/i18n`.
