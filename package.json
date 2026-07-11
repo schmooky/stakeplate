@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.32.1",
   "description": "Stake Engine slot built on slotplate architecture: pixi-reels reels, open-ui HUD, Stake networking, local RGS emulator. First game: the Lucky-Magnet digits & magnet design.",
   "engines": {
     "node": ">=20"
