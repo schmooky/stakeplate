@@ -45,8 +45,9 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
 
-      # Publishes every PUBLIC workspace package (currently @stakeplate/core), converting
-      # workspace:* to real versions. Private packages (apps, emulator) are skipped.
-      - run: pnpm -r publish --access public --no-git-checks
-        env:
-          NPM_CONFIG_PROVENANCE: 'true'
+      # Publish with the OIDC-capable npm CLI (installed above) — pnpm's publish does NOT
+      # perform npm's OIDC trusted-publishing token exchange, so it falls back to needing a
+      # token (ENEEDAUTH). @stakeplate/core is the only public package; publish it directly.
+      # Provenance is emitted automatically under OIDC.
+      - run: npm publish --access public --provenance
+        working-directory: packages/core
