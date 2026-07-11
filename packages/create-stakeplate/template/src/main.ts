@@ -39,6 +39,10 @@ const present: Phase<Data, Scene, Ev> = {
 const game = createStakeGame<Data, Scene, Ev>({
   // The bet ladder, default bet and buy-confirm come from the RGS/jurisdiction, NOT here.
   config: { title: '{{name}}', rtp: 96, rules: rulesMenu, socialMessages },
+  // The core's configurable boot loader (spinner + progress → reveals the game). Add a
+  // `logo`, `backgroundImage`, or `features: [{ image, text }]` to make it a full intro.
+  // Pair with the `@stakeplate/core/vite` plugin (see vite.config.ts) for zero black flash.
+  loader: { title: '{{name}}', subtitle: 'Loading…' },
   // The ONE money seam: parse the book's events into your model. Pure. The win/multiplier
   // are the engine's (server-authoritative) — never compute payouts on the client.
   interpretBook: (raw, info): Data => {
@@ -55,4 +59,4 @@ const game = createStakeGame<Data, Scene, Ev>({
   sceneHost: document.getElementById('scene')!,
 });
 
-game.start().finally(() => document.getElementById('boot')?.setAttribute('data-done', '1'));
+void game.start(); // the core's loader (configured above) covers boot + reveals the game

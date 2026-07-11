@@ -1,6 +1,6 @@
 {
   "name": "create-stakeplate",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Scaffold a Stake Engine slot game on @stakeplate/core — `npm create stakeplate@latest`",
   "keywords": [
     "stake",
