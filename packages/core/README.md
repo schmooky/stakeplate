@@ -61,6 +61,13 @@ config.socialMessages = { en: built.socialEn }; // auto-derived social wording
 - `@stakeplate/core/rgs` — wire protocol, launch-param runtime, `NetworkManager` +
   Stake/mock adapters, `createNetwork`.
 - `@stakeplate/core/audio` — zvuk bus graph (music/effects groups) + HUD slider/mute binding.
+  Loaded one-shots are RMS-normalized by default (consistent levels, no per-file gains) and
+  each effects bus is voice-capped so stacked cues don't machine-gun. `play(name, { volume,
+  pitch })` takes jitter (`{ base, jitter }`) so repeated cues vary. `bindInputSounds(audio,
+  hud, map)` (or an `AudioSpec.inputSounds` map) plays a cue on spin/bet/autoplay/turbo/skip.
+  Encode raw clips to shippable web assets (webm/opus + mp3 codec ladder, all metadata
+  stripped) with `scripts/encode-audio.sh OUTDIR raw/*.wav`, then load the pair with
+  `{ url: ['clip.webm', 'clip.mp3'] }`.
 - `@stakeplate/core/rules` — `buildRules` compliant menu + `toSocial`/`findRestricted` + dict.
 - `@stakeplate/core/stores` — the MobX stores (balance, ui) for composing game state.
 - `@stakeplate/core/testing` — the mock RGS, scriptable network, instant ticker.

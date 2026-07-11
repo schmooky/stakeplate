@@ -6,3 +6,4 @@ export * from './hud-port';
 export * from './round';
 export * from './fsm';
 export * from './phases';
+export * from './beat';

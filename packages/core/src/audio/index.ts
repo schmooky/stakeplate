@@ -11,12 +11,13 @@
 // Groups are zvuk BusGroups (a logical handle: a slider sets every member's level). Keep the
 // per-sound mix in the sound volumes; the sliders scale the whole group.
 
-import { createEngine, Ducker, type Engine, type Bus, type BusConfig, type BusGroup } from '@schmooky/zvuk';
+import { createEngine, Ducker, type Engine, type Bus, type BusConfig, type BusGroup, type VoiceJitter, type ConcurrencyConfig, type LoudnessOptions } from '@schmooky/zvuk';
 import type { BootedHud } from '@open-slot-ui/pixi';
 import type { AudioPort } from '../engine/fsm';
 import { bindMixerToHud, type MixerLike, type MixerGroup } from './bind';
 
 export { bindMixerToHud, type MixerLike, type MixerGroup } from './bind';
+export { bindInputSounds, type InputSoundMap, type InputSoundOptions } from './inputs';
 
 /** Buses in the MUSIC group (driven by the Music slider). */
 export type MusicBus = 'music' | 'ambience';
@@ -36,6 +37,18 @@ export interface GameAudioOptions {
   /** Duck the MUSIC group while THESE sfx buses are active (default `['wins']`; `null` = off). */
   duckMusicFrom?: SfxBus | SfxBus[] | null;
   duckAmount?: number;
+  /**
+   * RMS loudness normalization applied to every loaded one-shot so the whole manifest sits
+   * at a consistent level (no hand-tuned per-file gains). A per-entry `normalize` overrides
+   * this. Default `true`. Pass a `LoudnessOptions` object to tune the target, or `false` off.
+   */
+  normalize?: boolean | LoudnessOptions;
+  /**
+   * Voice cap applied to EACH effects bus so stacked one-shots (a multi-pay cascade, rapid
+   * contacts) don't machine-gun — steals the oldest voice when the cap is hit. Default
+   * `{ max: 8, steal: 'oldest' }`. Pass `null` to leave the effects buses uncapped.
+   */
+  sfxConcurrency?: ConcurrencyConfig | null;
 }
 
 /**
@@ -45,7 +58,7 @@ export interface GameAudioOptions {
  * needed) — just the crossfade window in ms.
  */
 export type SoundEntry =
-  | { name: string; kind?: 'sound'; url: string | string[]; bus?: BusName }
+  | { name: string; kind?: 'sound'; url: string | string[]; bus?: BusName; normalize?: boolean | LoudnessOptions }
   | { name: string; kind: 'music'; loop: string | string[]; intro?: string | string[]; outro?: string | string[]; loopCrossfadeMs?: number };
 
 /** The pre-wired game mixer. Satisfies {@link AudioPort} + {@link MixerLike}. */
@@ -55,15 +68,19 @@ export class GameAudio implements AudioPort, MixerLike {
   private readonly effectsGroup: BusGroup;
   private readonly duckFrom: SfxBus[];
   private readonly duckAmount: number;
+  private readonly normalizeDefault: boolean | LoudnessOptions;
   private unlocked = false;
   private currentMusic: { stop(opts?: { fade?: number }): void } | null = null;
 
   constructor(opts: GameAudioOptions = {}) {
     const musicLevel = opts.music ?? 0.8;
     const fxLevel = opts.effects ?? 1;
+    // Cap each effects bus so stacked one-shots don't machine-gun (opt out with `null`).
+    const conc = opts.sfxConcurrency === undefined ? ({ max: 8, steal: 'oldest' } as ConcurrencyConfig) : opts.sfxConcurrency;
+    this.normalizeDefault = opts.normalize ?? true;
     const buses = {} as Record<BusName, BusConfig>;
     for (const b of MUSIC_BUSES) buses[b] = { level: musicLevel };
-    for (const b of SFX_BUSES) buses[b] = { level: fxLevel };
+    for (const b of SFX_BUSES) buses[b] = { level: fxLevel, ...(conc ? { concurrency: conc } : {}) };
     this.engine = createEngine<BusName>({
       buses,
       master: { headroom: opts.masterHeadroom ?? -3, limiter: { threshold: -1 } },
@@ -120,13 +137,19 @@ export class GameAudio implements AudioPort, MixerLike {
               { loop: e.loop, ...(e.intro ? { intro: e.intro } : {}), ...(e.outro ? { outro: e.outro } : {}) },
               e.loopCrossfadeMs != null ? { loopCrossfade: e.loopCrossfadeMs / 1000 } : undefined,
             )
-          : this.engine.loadSound(e.name, e.url, { bus: e.bus ?? 'ui' }),
+          : this.engine.loadSound(e.name, e.url, { bus: e.bus ?? 'ui', normalize: e.normalize ?? this.normalizeDefault }),
       ),
     );
   }
 
-  play(name: string, opts?: { bus?: BusName; volume?: number }): void {
-    this.engine.sound(name).play({ ...(opts?.bus ? { bus: opts.bus } : {}), ...(opts?.volume != null ? { volume: opts.volume } : {}) });
+  /** Fire a one-shot. `volume`/`pitch` accept a `VoiceJitter` (`{ base, jitter }`) so
+   *  repeated cues — contacts, ticks — vary per voice instead of sounding cloned. */
+  play(name: string, opts?: { bus?: BusName; volume?: number | VoiceJitter; pitch?: number | VoiceJitter }): void {
+    this.engine.sound(name).play({
+      ...(opts?.bus ? { bus: opts.bus } : {}),
+      ...(opts?.volume != null ? { volume: opts.volume } : {}),
+      ...(opts?.pitch != null ? { pitch: opts.pitch } : {}),
+    });
   }
 
   music(name: string, opts?: { fadeIn?: number }): void {

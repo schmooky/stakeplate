@@ -12,9 +12,14 @@ import type { HudPort } from './hud-port';
 import type { GameRound, InterpretBook } from './round';
 import type { GameConfig } from '../game/config';
 
+/** A fixed value or a per-voice random spread (`{ base, jitter }`) — structurally matches
+ *  zvuk's `VoiceJitter` without importing it, so the engine stays zvuk-free. */
+export type AudioValue = number | { base?: number; jitter?: number };
+
 /** The minimal audio surface a game's phases call (satisfied by `@stakeplate/core/audio`). */
 export interface AudioPort {
-  play(name: string, opts?: { bus?: string; volume?: number }): void;
+  /** Fire a one-shot. `volume`/`pitch` accept jitter so repeated cues vary per voice. */
+  play(name: string, opts?: { bus?: string; volume?: AudioValue; pitch?: AudioValue }): void;
   music(name: string, opts?: { fadeIn?: number }): void;
   stopMusic(opts?: { fade?: number }): void;
 }

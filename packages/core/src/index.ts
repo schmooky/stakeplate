@@ -7,3 +7,4 @@ export * from './rgs';
 export * from './engine';
 export * from './stores';
 export * from './game';
+export * from './currency';

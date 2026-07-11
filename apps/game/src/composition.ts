@@ -88,10 +88,14 @@ const VORTEX_CARD_ART =
     </svg>`,
   );
 
-/** Build a minimal open-ui CurrencySpec from the session currency code. */
+/** Build a minimal open-ui CurrencySpec from the session currency code. Three-decimal
+ *  fiat (Gulf/Arab dinars & rials) must not be truncated to 2dp — e.g. OMR 0.01 × ×0.2 =
+ *  0.002 → "0.00". Mirrors @stakeplate/core's `currencyFor`; inline as this app predates
+ *  the core dep. */
+const DINAR_DECIMALS: Record<string, number> = { KWD: 3, BHD: 3, JOD: 3, OMR: 3, TND: 3, LYD: 3, IQD: 3 };
 function currencyFor(code: string): CurrencySpec {
   if (code === 'USD') return { code: 'USD', symbol: '$', display: 'symbol', position: 'prefix', decimals: 2 };
-  return { code, decimals: 2 };
+  return { code, decimals: DINAR_DECIMALS[code?.toUpperCase()] ?? 2 };
 }
 
 /** Slice a vertical sprite-sheet texture into `rows` equal frames. */

@@ -8,7 +8,8 @@
 import { Application } from 'pixi.js';
 import { mountHud, showBootError, mountBuyFeatureModal, type BootedHud, type FeatureSpec } from '@open-slot-ui/pixi';
 import { loadBuiltinArt } from '@open-slot-ui/pixi/art';
-import { resolveCurrency, isSocialCurrency } from '@open-slot-ui/core';
+import { isSocialCurrency } from '@open-slot-ui/core';
+import { currencyFor } from '../currency';
 import { reaction } from 'mobx';
 import { readRuntime, type RuntimeConfig } from '../rgs/runtime';
 import { createNetwork, type NetworkManager } from '../rgs/network';
@@ -20,6 +21,7 @@ import { FSM, type AudioPort, type Phase, type PhaseContext } from '../engine/fs
 import { defaultPhases } from '../engine/phases';
 import { roundInfo, type InterpretBook } from '../engine/round';
 import { bindMixerToHud, type MixerLike } from '../audio/bind';
+import { bindInputSounds, type InputSoundMap } from '../audio/inputs';
 import type { GameAudioOptions, SoundEntry } from '../audio';
 import { modeCostOf, type GameConfig } from './config';
 
@@ -31,6 +33,9 @@ import { modeCostOf, type GameConfig } from './config';
  */
 export interface AudioSpec extends GameAudioOptions {
   sounds: SoundEntry[];
+  /** Optional: play a cue on HUD input events (spin/bet/autoplay/turbo/toggle/skip). The
+   *  core auto-binds these after the HUD mounts — the named sounds must be in `sounds`. */
+  inputSounds?: InputSoundMap;
 }
 
 /** Passed to `mountView` — everything the game's scene needs (not the round/fsm yet). */
@@ -135,7 +140,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
   // The HUD spec is driven by SERVER-authoritative values (the ladder + confirm policy come
   // from `authenticate`/jurisdiction, not the game). `buildSpec` just formats them.
   const buildSpec = (s: HudSpecInput): Record<string, unknown> => ({
-    currency: resolveCurrency(s.currency),
+    currency: currencyFor(s.currency),
     betLadder: { levels: s.betLevels, index: Math.max(0, s.betLevels.indexOf(s.defaultBet)) },
     rtp: s.rtp,
     game: { name: opts.config.title, version: opts.config.version ?? '1.0.0' },
@@ -195,7 +200,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
         const info = roundInfo(raw, bet, cost);
         const ctx = makeCtx(machine, view);
         ctx.round = { ...info, data: opts.interpretBook(raw, info), active: false, balance: 0, raw };
-        const replayInfo = { baseBet: bet, costMultiplier: cost, payoutMultiplier: info.multiplier, amount: info.totalWin, currency: resolveCurrency(cur) };
+        const replayInfo = { baseBet: bet, costMultiplier: cost, payoutMultiplier: info.multiplier, amount: info.totalWin, currency: currencyFor(cur) };
         const playRound = async (): Promise<void> => {
           stores.ui.setSpinning(true);
           await machine.transition('present'); // game's Present plays it back → settle → idle
@@ -236,7 +241,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     const confirmBuyAboveCost = juris.confirmBuyAboveCost ?? STAKE_CONFIRM_ABOVE_COST;
 
     hud = mountHud(app, buildSpec({ currency, betLevels, defaultBet, rtp, confirmBuyAboveCost }), (await hudOpts()) as never);
-    hud.setCurrency(resolveCurrency(currency));
+    hud.setCurrency(currencyFor(currency));
     hud.applyJurisdiction(juris);
     if (runtime.social || isSocialCurrency(currency)) hud.setSocial(true);
 
@@ -271,9 +276,12 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     disposers.push(hud.on('spinRequested', beginSpin));
     // Autoplay/hold: the HUD owns the count picker, remaining count + RG limits (via
     // reportRound); the CORE runs the loop. Start on the first tick, then re-spin below.
-    disposers.push(hud.on('autoplayStarted', beginSpin));
-    disposers.push(hud.on('holdSpinStarted', () => { holdActive = true; beginSpin(); }));
-    disposers.push(hud.on('holdSpinStopped', () => { holdActive = false; }));
+    // Autoplay/hold both shorten game animations (turbo.setAutoplay) so long auto sessions
+    // don't crawl. It's a floor on turbo speed — a faster turbo level still wins.
+    disposers.push(hud.on('autoplayStarted', () => { turbo.setAutoplay(true); beginSpin(); }));
+    disposers.push(hud.on('autoplayStopped', () => { turbo.setAutoplay(holdActive); }));
+    disposers.push(hud.on('holdSpinStarted', () => { holdActive = true; turbo.setAutoplay(true); beginSpin(); }));
+    disposers.push(hud.on('holdSpinStopped', () => { holdActive = false; turbo.setAutoplay(hud!.ui.autoplay.isActive); }));
     // Turbo speed (2-/3-mode cycler) + slam-stop (tap-to-skip the reels).
     disposers.push(hud.on('turboChanged', (p) => { const e = p as { index?: number }; if (typeof e.index === 'number') turbo.setLevel(e.index); }));
     disposers.push(hud.on('skipRequested', () => turbo.skip()));
@@ -345,6 +353,10 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
         const off = hud.on('spinRequested', () => { void mixer.unlock!(); off(); });
         disposers.push(off);
       }
+    }
+    // Input sounds: if the declarative AudioSpec named cues per HUD input, wire them now.
+    if (audio && isAudioSpec(opts.audio) && opts.audio.inputSounds) {
+      disposers.push(bindInputSounds(audio, hud, opts.audio.inputSounds));
     }
 
     // ── ACTIVE-ROUND RESUME: settle it + play it back, else idle ────────────────

@@ -35,9 +35,13 @@ export interface ComposeOptions {
   network?: NetworkManager;
 }
 
+// Three-decimal fiat (Gulf/Arab dinars & rials) must not be truncated to 2dp — e.g. the
+// Omani Rial's minimal 0.01 stake at ×0.2 is a 0.002 win, which would render as "0.00".
+// Mirrors @stakeplate/core's `currencyFor`; kept inline as this app predates the core dep.
+const DINAR_DECIMALS: Record<string, number> = { KWD: 3, BHD: 3, JOD: 3, OMR: 3, TND: 3, LYD: 3, IQD: 3 };
 function currencyFor(code: string): CurrencySpec {
   if (code === 'USD') return { code: 'USD', symbol: '$', display: 'symbol', position: 'prefix', decimals: 2 };
-  return { code, decimals: 2 };
+  return { code, decimals: DINAR_DECIMALS[code?.toUpperCase()] ?? 2 };
 }
 
 function sliceRows(tex: Texture, rows: number): Texture[] {

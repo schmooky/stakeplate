@@ -15,6 +15,26 @@ describe('TurboClock — turbo speed + slam-stop', () => {
     expect(elapsed).toBeLessThan(120);
   });
 
+  it('autoplay floors the speed but never slows a faster turbo level', () => {
+    const t = new TurboClock([1, 0.4, 0.1], 0.5); // autoplaySpeed 0.5
+    expect(t.autoplay).toBe(false);
+    expect(t.speed).toBe(1);
+    t.setAutoplay(true);
+    expect(t.autoplay).toBe(true);
+    expect(t.speed).toBe(0.5); // turbo off (1×) is floored to the autoplay speed
+    t.setLevel(2); // super turbo (0.1×) is faster than autoplay → keep it
+    expect(t.speed).toBe(0.1);
+    t.setLevel(0);
+    t.setAutoplay(false);
+    expect(t.speed).toBe(1); // back to normal
+  });
+
+  it('defaults the autoplay speed to the turbo (level-1) speed', () => {
+    const t = new TurboClock([1, 0.4, 0.1]); // no explicit autoplaySpeed
+    t.setAutoplay(true);
+    expect(t.speed).toBe(0.4);
+  });
+
   it('clamps the level to the configured speeds', () => {
     const t = new TurboClock([1, 0.4]);
     t.setLevel(5);
