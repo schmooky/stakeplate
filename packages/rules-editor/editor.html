@@ -123,7 +123,7 @@
   let trLocale = null;      // translate/preview locale (null → en source)
   const $ = (s) => document.querySelector(s);
 
-  const KINDS = ['heading', 'subheading', 'text', 'steps', 'callout', 'stat-grid', 'mode-stats', 'table', 'image', 'legal', 'divider'];
+  const KINDS = ['heading', 'subheading', 'text', 'steps', 'callout', 'stat-grid', 'mode-stats', 'table', 'image', 'media', 'cards', 'paytable', 'legal', 'divider'];
 
   const uid = () => {
     let n = 1;
@@ -142,7 +142,16 @@
       case 'stat-grid': return { kind, id, items: [{ label: 'Lines', value: '20' }] };
       case 'mode-stats': return { kind, id };
       case 'table': return { kind, id, columns: ['Symbol', '3', '4', '5'], rows: [['Wild', '5x', '20x', '50x']] };
-      case 'image': return { kind, id, src: 'https://placehold.co/1000x180', width: 1000, height: 180, alt: '' };
+      case 'image': return { kind, id, src: 'https://placehold.co/1000x180/2a2f3a/ffd166?text=FEATURE+ART', width: 1000, height: 180, alt: '' };
+      case 'media': return { kind, id, side: 'left', src: 'https://placehold.co/320x200/2a2f3a/ffd166?text=BONUS', width: 320, height: 200, alt: '', title: 'Feature name', text: 'Explain the feature next to its art.' };
+      case 'cards': return { kind, id, items: [
+        { icon: 'https://placehold.co/72x72/ef4444/ffffff?text=W', title: 'Wild', text: 'Substitutes for every paying symbol.' },
+        { icon: 'https://placehold.co/72x72/3b82f6/ffffff?text=S', title: 'Scatter', text: 'Pays anywhere on the reels.' },
+      ] };
+      case 'paytable': return { kind, id, rows: [
+        { icon: 'https://placehold.co/72x72/ef4444/ffffff?text=W', symbol: 'Wild', payouts: '3: 5.00x\n4: 20.00x\n5: 50.00x' },
+        { icon: 'https://placehold.co/72x72/3b82f6/ffffff?text=S', symbol: 'Scatter', payouts: '3: 3.00x\n4: 10.00x\n5: 40.00x' },
+      ] };
       case 'legal': return { kind, id, text: 'Malfunction voids all wins and plays.' };
       default: return { kind: 'divider', id };
     }
@@ -192,6 +201,8 @@
       if (b.kind === 'stat-grid') (b.items ?? []).forEach((it) => { add(it.label); add(it.value); });
       if (b.kind === 'mode-stats') (b.extras ?? []).forEach((it) => { add(it.label); add(it.value); });
       if (b.kind === 'table') { (b.columns ?? []).forEach(add); (b.rows ?? []).forEach((r) => r.forEach(add)); }
+      if (b.kind === 'cards') (b.items ?? []).forEach((it) => { add(it.title); add(it.text); });
+      if (b.kind === 'paytable') (b.rows ?? []).forEach((r) => add(r.symbol));
     }
     return out;
   }
@@ -227,7 +238,14 @@
         f = lines('columns', [b.columns ?? []], 'columns: a | b | c', (r) => (r ?? []).join(' | ')) +
             lines('rows', b.rows, 'rows: a | b | c — one per line', (r) => r.join(' | '));
         break;
-      case 'image': f = inp('src', b.src, 'src') + `<div class="row">${inp('width', b.width, 'width', 'number')}${inp('height', b.height, 'height', 'number')}</div>` + inp('alt', b.alt, 'alt'); break;
+      case 'image': f = inp('src', b.src, 'image url') + `<div class="row">${inp('width', b.width, 'width', 'number')}${inp('height', b.height, 'height', 'number')}</div>` + inp('alt', b.alt, 'alt'); break;
+      case 'media':
+        f = inp('src', b.src, 'image url') +
+            `<div class="row"><div><label>side</label><select data-f="side">${['left', 'right'].map((s) => `<option${s === (b.side ?? 'left') ? ' selected' : ''}>${s}</option>`).join('')}</select></div><div>${inp('alt', b.alt, 'alt')}</div></div>` +
+            inp('title', b.title, 'title') + ta('text', b.text, 'copy beside the image');
+        break;
+      case 'cards': f = lines('items', b.items, 'icon url | title | text — one card per line', (it) => `${it.icon ?? ''} | ${it.title} | ${it.text ?? ''}`); break;
+      case 'paytable': f = lines('rows', b.rows, 'icon url | symbol | payouts (separate payout lines with ";") — one row per line', (r) => `${r.icon ?? ''} | ${r.symbol ?? ''} | ${(r.payouts ?? '').split('\n').join('; ')}`); break;
       default: f = '';
     }
     return f +
@@ -244,11 +262,23 @@
       case 'ordered': b.ordered = !!v; break;
       case 'items':
         if (b.kind === 'steps') b.items = String(v).split('\n').filter((s) => s.trim());
+        else if (b.kind === 'cards')
+          b.items = String(v).split('\n').filter((s) => s.trim()).map((line) => {
+            const [icon = '', title = '', text = ''] = line.split('|').map((s) => s.trim());
+            return { ...(icon ? { icon } : {}), title, ...(text ? { text } : {}) };
+          });
         else b.items = String(v).split('\n').filter((s) => s.trim()).map(pair);
         break;
       case 'extras': { const rows = String(v).split('\n').filter((s) => s.trim()).map(pair); if (rows.length) b.extras = rows; else delete b.extras; break; }
       case 'columns': b.columns = String(v).split('|').map((s) => s.trim()).filter(Boolean); break;
-      case 'rows': b.rows = String(v).split('\n').filter((s) => s.trim()).map((line) => line.split('|').map((s) => s.trim())); break;
+      case 'rows':
+        if (b.kind === 'paytable')
+          b.rows = String(v).split('\n').filter((s) => s.trim()).map((line) => {
+            const [icon = '', symbol = '', pay = ''] = line.split('|').map((s) => s.trim());
+            return { ...(icon ? { icon } : {}), ...(symbol ? { symbol } : {}), payouts: pay.split(';').map((s) => s.trim()).filter(Boolean).join('\n') };
+          });
+        else b.rows = String(v).split('\n').filter((s) => s.trim()).map((line) => line.split('|').map((s) => s.trim()));
+        break;
       case 'width': case 'height': b[name] = Number(v) || undefined; break;
       case 'covers': { const tags = String(v).split(',').map((s) => s.trim()).filter(Boolean); if (tags.length) b.covers = tags; else delete b.covers; break; }
       case 'explains': { const t = String(v).trim(); if (t) b.explains = t; else delete b.explains; break; }
@@ -364,34 +394,60 @@
       });
     } else if (tab === 'preview') {
       renderLocales();
-      const r = (s) => rich(interp(translated(s)));
-      const modeRows = () => {
-        const rows = [];
-        for (const m of facts.modes ?? []) {
-          if (m.rtp != null) rows.push([`RTP · ${m.name}`, `${m.rtp.toFixed(2)}%`]);
-          if (m.maxWinX != null) rows.push([`Max win · ${m.name}`, `${m.maxWinX.toLocaleString('en-US')}×`]);
-        }
-        if (facts.volatility) rows.push(['Volatility', facts.volatility]);
-        if (facts.maxWinCapX != null) rows.push(['Round cap', `${facts.maxWinCapX.toLocaleString('en-US')}×`]);
-        return rows;
-      };
-      p.innerHTML = `<div class="pv">` + doc.blocks.map((b) => {
-        switch (b.kind) {
-          case 'heading': return `<div class="sec"><span>${r(b.text)}</span></div>`;
-          case 'subheading': return `<h4>${r(b.text)}</h4>`;
-          case 'text': return `<p>${r(b.text)}</p>`;
-          case 'legal': return `<p class="legal">${r(b.text)}</p>`;
-          case 'steps': { const items = (b.items ?? []).map((s) => `<li>${r(s)}</li>`).join(''); return b.ordered ? `<ol>${items}</ol>` : `<ul>${items}</ul>`; }
-          case 'callout': return `<div class="co">${b.title ? `<b>${r(b.title)}</b> ` : ''}${r(b.text)}</div>`;
-          case 'stat-grid': return `<dl>${(b.items ?? []).map((it) => `<div><dt>${r(it.label)}</dt><dd>${r(it.value)}</dd></div>`).join('')}</dl>`;
-          case 'mode-stats': return `<dl>${[...modeRows(), ...((b.extras ?? []).map((e2) => [e2.label, e2.value]))].map(([l, v]) => `<div><dt>${r(l)}</dt><dd>${r(v)}</dd></div>`).join('')}</dl>`;
-          case 'table': { const head = b.columns?.length ? `<tr>${b.columns.map((c) => `<th>${r(c)}</th>`).join('')}</tr>` : ''; return `<table>${head}${(b.rows ?? []).map((row) => `<tr>${row.map((c) => `<td>${r(c)}</td>`).join('')}</tr>`).join('')}</table>`; }
-          case 'image': return `<img src="${esc(b.src)}" alt="${esc(b.alt ?? '')}">`;
-          case 'divider': return '<hr>';
-          default: return '';
-        }
-      }).join('') + `</div>`;
+      p.innerHTML = '<p style="color:var(--dim);padding:4px 2px">Rendering with the in-game renderer…</p>';
+      void renderPreview(p);
     }
+  }
+
+  // ── WYSIWYG preview — the REAL in-game renderer (@open-slot-ui/core), served by
+  //    the CLI: pixel-identical markup + the actual info-menu stylesheet. ─────────
+  let ohmCssInjected = false;
+  const applyOhmVars = (el, cssVars) => {
+    for (const [k, v] of Object.entries(cssVars ?? {})) el.style.setProperty(k, v);
+    el.style.setProperty('--font', getComputedStyle(document.body).fontFamily);
+  };
+  async function fetchPreview() {
+    const r = await api('/api/preview', { doc, locale: trLocale ?? 'en' });
+    if (r.error) throw new Error(r.error);
+    if (!ohmCssInjected) {
+      const st = document.createElement('style');
+      st.textContent = r.css;
+      document.head.appendChild(st);
+      ohmCssInjected = true;
+    }
+    return r;
+  }
+  async function renderPreview(p) {
+    try {
+      const r = await fetchPreview();
+      p.innerHTML = `
+        <button class="btn primary" id="pv-full" style="margin:0 0 10px">Open in-game preview</button>
+        <div id="pv-inline" class="ohm-card" style="width:100%;max-height:none;transform:none"><div class="ohm-body" style="overflow:visible">${r.html}</div></div>`;
+      applyOhmVars($('#pv-inline'), r.cssVars);
+      $('#pv-full').addEventListener('click', () => void openFullPreview());
+    } catch (e) {
+      p.innerHTML = `<div class="issue">Preview failed: ${esc(String(e.message ?? e))}</div>`;
+    }
+  }
+  /** The full-screen preview — the EXACT in-game overlay: blurred backdrop, the
+   *  white card, the ✕ button. What you see here is what the player sees. */
+  async function openFullPreview() {
+    const r = await fetchPreview();
+    const overlay = document.createElement('div');
+    overlay.className = 'ohm-root';
+    applyOhmVars(overlay, r.cssVars);
+    overlay.innerHTML = `
+      <div class="ohm-backdrop" data-close></div>
+      <button class="ohm-x" data-close aria-label="Close">✕</button>
+      <div class="ohm-card" role="dialog" aria-modal="true"><div class="ohm-body">
+        <div class="ohm-sec"><span>Rules</span></div>
+        ${r.html}
+      </div></div>`;
+    // Open SYNCHRONOUSLY — a rAF-deferred class + opacity transition freezes when the
+    // tab is backgrounded/throttled (the same lesson the in-game confirm modal learned).
+    overlay.classList.add('open');
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => overlay.remove()));
   }
 
   // ── boot ───────────────────────────────────────────────────────────────────

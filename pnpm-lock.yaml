@@ -98,11 +98,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/stake-protocol
       '@open-slot-ui/core':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
       '@open-slot-ui/pixi':
-        specifier: ^0.10.0
-        version: 0.10.0(pixi.js@8.19.0)
+        specifier: ^0.11.0
+        version: 0.11.0(pixi.js@8.19.0)
       gsap:
         specifier: ^3.13.0
         version: 3.15.0
@@ -236,8 +236,8 @@ importers:
   packages/rules-editor:
     dependencies:
       '@open-slot-ui/core':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
 
   packages/stake-protocol:
     devDependencies:
@@ -1387,8 +1387,8 @@ packages:
     resolution: {integrity: sha512-+llXfqt+UzgoDzT9of5vPQPGqTAVCohU74I9zIBkNo5TH6s2P31DFJOGsJQKN207f0GHnYv5pV3wh3BCY/un/A==}
     engines: {node: '>= 10'}
 
-  '@open-slot-ui/core@0.10.0':
-    resolution: {integrity: sha512-JC1hsVIyAM7dALxctVcia7Dmm33VsvdFd/izWOeFSlM9DDpOEJNUpKgHKCXM2hqB9lL03CBxrrLYKH/8724HEA==}
+  '@open-slot-ui/core@0.11.0':
+    resolution: {integrity: sha512-IGVG2ws1Hqjmh1fFmqqE36Uyxtb82PmwN8BuPkjdTlFzUTmqKn28HWPT3vVEAn6qyV+IgjXViD6QiX3YjdRDPw==}
     engines: {node: '>=18'}
 
   '@open-slot-ui/core@0.2.4':
@@ -1399,8 +1399,8 @@ packages:
     resolution: {integrity: sha512-OEYNSZPBNK8lmlp18JxHGnvEprghJgGAXBsFnI0BNB6mKGRCQxG71VVN5s0B0b+TELn4tPpsL1/SXk6gvzxcDQ==}
     engines: {node: '>=18'}
 
-  '@open-slot-ui/pixi@0.10.0':
-    resolution: {integrity: sha512-w9/5gFsdM+5aNmCujme9J2nj9/IGYeLTRkiSA3ja7161bbPvHcHIl9/qYZvFjn3NuQckAi6dsiBme4wpyDnjtQ==}
+  '@open-slot-ui/pixi@0.11.0':
+    resolution: {integrity: sha512-wwE7hLKW2/K+7FSpwJ9gTrUtEzbhbdCAN5mCHszOJdxYdKPJSTsxL+k9Ouw3B/zYEagu3yqrPIAVEalbQarD0Q==}
     engines: {node: '>=18'}
     peerDependencies:
       pixi.js: ^8
@@ -4437,15 +4437,15 @@ snapshots:
       '@node-rs/crc32-win32-ia32-msvc': 1.10.6
       '@node-rs/crc32-win32-x64-msvc': 1.10.6
 
-  '@open-slot-ui/core@0.10.0': {}
+  '@open-slot-ui/core@0.11.0': {}
 
   '@open-slot-ui/core@0.2.4': {}
 
   '@open-slot-ui/core@0.8.3': {}
 
-  '@open-slot-ui/pixi@0.10.0(pixi.js@8.19.0)':
+  '@open-slot-ui/pixi@0.11.0(pixi.js@8.19.0)':
     dependencies:
-      '@open-slot-ui/core': 0.10.0
+      '@open-slot-ui/core': 0.11.0
       pixi.js: 8.19.0
 
   '@open-slot-ui/pixi@0.2.4(pixi.js@8.19.0)':

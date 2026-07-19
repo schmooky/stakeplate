@@ -16,7 +16,17 @@ import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { auditRulesDoc, validateSpec, factsVars, mergeFacts, isRulesDoc } from '@open-slot-ui/core';
+import {
+  auditRulesDoc,
+  validateSpec,
+  factsVars,
+  mergeFacts,
+  isRulesDoc,
+  renderBlocksHtml,
+  renderRulesAuditHtml,
+  INFO_MENU_CSS,
+  INFO_MENU_VARS,
+} from '@open-slot-ui/core';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -110,6 +120,23 @@ function analyze(doc, locale = 'en') {
   return { audit, specIssues: spec.issues, vars: factsVars(facts), facts };
 }
 
+/** Translate-and-interpolate exactly like the in-game menu: the locale dictionary
+ *  first (English copy is its own key), then the facts tokens. */
+function makeResolve(doc, facts, locale) {
+  const dict = doc.messages?.[locale] ?? {};
+  const vars = factsVars(facts);
+  return (s) => (dict[s] ?? s).replace(/\{\{([\w.-]+)\}\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
+}
+
+/** The WYSIWYG payload: the rules rendered by the REAL in-game renderer (audit card
+ *  included) + the in-game stylesheet — pixel-identical to what mountInfoMenu shows. */
+function preview(doc, locale = 'en') {
+  const { audit, facts } = analyze(doc, locale);
+  const resolve = makeResolve(doc, facts, locale);
+  const html = renderRulesAuditHtml(audit, (s) => s) + renderBlocksHtml(doc.blocks, resolve, facts);
+  return { html, css: INFO_MENU_CSS, cssVars: INFO_MENU_VARS };
+}
+
 // ── server ───────────────────────────────────────────────────────────────────
 const html = readFileSync(join(__dirname, 'editor.html'), 'utf8');
 const json = (res, code, body) => {
@@ -145,6 +172,10 @@ const server = createServer(async (req, res) => {
       const { doc, locale } = await body(req);
       if (!isRulesDoc(doc)) return json(res, 400, { error: 'not a RulesDoc' });
       json(res, 200, analyze(doc, locale ?? 'en'));
+    } else if (req.method === 'POST' && url.pathname === '/api/preview') {
+      const { doc, locale } = await body(req);
+      if (!isRulesDoc(doc)) return json(res, 400, { error: 'not a RulesDoc' });
+      json(res, 200, preview(doc, locale ?? 'en'));
     } else if (req.method === 'POST' && url.pathname === '/api/save') {
       const { doc } = await body(req);
       if (!isRulesDoc(doc)) return json(res, 400, { error: 'not a RulesDoc' });

@@ -37,6 +37,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@open-slot-ui/core": "^0.10.0"
+    "@open-slot-ui/core": "^0.11.0"
   }
 }
