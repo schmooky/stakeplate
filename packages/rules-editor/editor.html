@@ -230,7 +230,11 @@
       case 'image': f = inp('src', b.src, 'src') + `<div class="row">${inp('width', b.width, 'width', 'number')}${inp('height', b.height, 'height', 'number')}</div>` + inp('alt', b.alt, 'alt'); break;
       default: f = '';
     }
-    return f + inp('covers', (b.covers ?? []).join(', '), 'covers (audit topics, comma-sep — e.g. rtp:base, freespins)');
+    return f +
+      `<div class="row">` +
+      `<div>${inp('explains', b.explains, 'explains (mode id — e.g. bonus)')}</div>` +
+      `<div>${inp('covers', (b.covers ?? []).join(', '), 'covers (topics — e.g. rtp:base)')}</div>` +
+      `</div>`;
   };
 
   function readField(b, name, el) {
@@ -247,6 +251,7 @@
       case 'rows': b.rows = String(v).split('\n').filter((s) => s.trim()).map((line) => line.split('|').map((s) => s.trim())); break;
       case 'width': case 'height': b[name] = Number(v) || undefined; break;
       case 'covers': { const tags = String(v).split(',').map((s) => s.trim()).filter(Boolean); if (tags.length) b.covers = tags; else delete b.covers; break; }
+      case 'explains': { const t = String(v).trim(); if (t) b.explains = t; else delete b.explains; break; }
       default: b[name] = v;
     }
   }

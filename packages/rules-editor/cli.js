@@ -54,11 +54,14 @@ const STARTER = {
     volatility: 'High',
     maxWinCapX: 5000,
   },
+  // EVERY declared mode gets its OWN section (a heading naming it, or blocks tagged
+  // `explains: '<modeId>'`) — the audit requires an explicit explanation per mode,
+  // with the cost stated inside a feature's section.
   blocks: [
     { kind: 'heading', id: 'r-h-about', text: 'About the game' },
-    { kind: 'text', id: 'r-about', text: 'The base game pays to an RTP of {{rtp.base}} with wins up to {{maxWin.base}}. Buy the **Bonus** for {{cost.bonus}} your bet.' },
-    { kind: 'heading', id: 'r-h-fs', text: 'Free spins' },
-    { kind: 'text', id: 'r-fs', text: 'The bonus awards exactly {{freeSpins.count}} free spins; free spins {{freeSpins.retrigger}} be retriggered.' },
+    { kind: 'text', id: 'r-about', text: 'The base game pays to an RTP of {{rtp.base}} with wins up to {{maxWin.base}} in a single round.' },
+    { kind: 'heading', id: 'r-h-bonus', text: 'The Bonus' },
+    { kind: 'text', id: 'r-bonus', text: 'Buy the **Bonus** for {{cost.bonus}} your bet. It awards exactly {{freeSpins.count}} free spins; free spins {{freeSpins.retrigger}} be retriggered.' },
     { kind: 'heading', id: 'r-h-controls', text: 'Controls' },
     { kind: 'steps', id: 'r-controls', ordered: false, items: [
       '**SPIN** — plays one round at the current bet.',
