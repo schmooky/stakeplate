@@ -8,10 +8,13 @@
 import { gsap } from 'gsap';
 import { autorun, reaction } from 'mobx';
 import { Assets, Rectangle, Texture } from 'pixi.js';
-import { mountHud, svgSpinSkin, type BootedHud } from '@open-slot-ui/pixi';
-import type { BlockSpec, CurrencySpec, UISpec } from '@open-slot-ui/core';
-import { mountBuyFeatureModal } from '@/hud/buyFeatureModal';
-import { mountHtmlMenu } from '@/hud/htmlMenu';
+import { mountHud, svgSpinSkin, mountBuyFeatureModal, type BootedHud } from '@open-slot-ui/pixi';
+import { applyRulesDoc, type RulesDoc } from '@open-slot-ui/core';
+import type { CurrencySpec, UISpec } from '@open-slot-ui/core';
+// The UNIVERSAL RULES DOCUMENT — authored/edited with `pnpm rules` (the
+// @stakeplate/rules-editor npx editor): draggable blocks, per-locale copy,
+// {{rtp.base}}-style tokens resolved from the game facts, audited live.
+import rulesDoc from './rules.doc.json';
 import type { SessionResponse } from '@/domain/types';
 import { GAME } from '@/config/gameConfig';
 import { getReplayParams } from '@/config/replay';
@@ -269,64 +272,55 @@ export async function compose({
 
   function buildSpec(session: SessionResponse): UISpec {
     const idx = Math.max(0, AVAILABLE_BETS.indexOf(GAME.defaultBet as (typeof AVAILABLE_BETS)[number]));
-    return {
-      theme: 'default',
-      currency: currencyFor(session.currency),
-      betLadder: { levels: [...AVAILABLE_BETS], index: idx },
-      turbo: { modes: 2 },
-      autoplay: { mode: 'options', options: [10, 25, 50, 100, Infinity] },
-      spin: { press: 'tap' },
-      // Compliance readouts (RTP / net / session) render as the top-left block;
-      // the jurisdiction switchboard (which to show) is applied at runtime from
-      // the RGS. The RTP figure itself:
-      rtp: session.rtp ?? 96,
-      game: { name: GAME.title, version: '1.0.0' },
-      // The ☰ menu is the white HTML menu (mountHtmlMenu) — see wireHud.
-    };
-  }
-
-  /** Rules blocks for the white HTML menu (Settings → Paytable → Rules). */
-  function menuRules(session: SessionResponse): BlockSpec[] {
-    return [
-      { kind: 'heading', id: 'r-h', text: 'How to play' },
+    // The rules document supplies `menu.rules` + its per-locale messages + the game
+    // FACTS (modes with RTP / max win, free spins, volatility) in ONE call; the info
+    // menu interpolates its {{tokens}} from the live facts and audits completeness.
+    return applyRulesDoc(
       {
-        kind: 'text',
-        id: 'r-1',
-        text: 'Land **consecutive digits** on a line to form a number — and win **that number**. Lines are the 3 columns (read top→bottom) and the 2 diagonals. A leading zero is dropped.',
+        theme: 'default',
+        currency: currencyFor(session.currency),
+        betLadder: { levels: [...AVAILABLE_BETS], index: idx },
+        turbo: { modes: 2 },
+        autoplay: { mode: 'options', options: [10, 25, 50, 100, Infinity] },
+        spin: { press: 'tap' },
+        // Compliance readouts (RTP / net / session) render as the top-left block;
+        // the jurisdiction switchboard (which to show) is applied at runtime from
+        // the RGS. The RTP figure itself:
+        rtp: session.rtp ?? 96,
+        game: { name: GAME.title, version: '1.0.0' },
+        // The ☰ menu is the library's white info menu (Settings → Paytable → Rules).
+        menu: {
+          paytable: [
+            {
+              kind: 'table',
+              id: 'pt',
+              rows: [
+                ['2-digit number', '2×'],
+                ['3-digit number', '10×'],
+              ],
+            },
+          ],
+        },
       },
-      {
-        kind: 'steps',
-        id: 'r-steps',
-        ordered: true,
-        items: ['Set your stake with the bet ± ', 'Press SPIN', 'A column of digits = a winning number'],
-      },
-      { kind: 'heading', id: 'r-h2', text: 'Vortex' },
-      {
-        kind: 'text',
-        id: 'r-2',
-        text: 'The **Vortex** fills a whole column with digits, making a number near-certain. It strikes at random in the base game — or open the **buy feature** to activate the Vortex ante and force one every spin.',
-      },
-      {
-        kind: 'stat-grid',
-        id: 'r-stats',
-        items: [
-          { label: 'RTP', value: `${(session.rtp ?? 96).toFixed(1)}%` },
-          { label: 'Vortex ante', value: `+${Math.round((GAME.vortexAnte - 1) * 100)}%` },
-          { label: 'Lines', value: '3 cols · 2 diag' },
-        ],
-      },
-    ];
+      rulesDoc as RulesDoc,
+    );
   }
 
   async function wireHud(session: SessionResponse): Promise<void> {
     const art = await loadHudArt();
     hud = mountHud(scene.app, buildSpec(session), {
       gsap,
-      menu: false, // we supply our own white HTML menu (mountHtmlMenu) below
+      // The library's white HTML info menu (Settings → Paytable → Rules + the
+      // rules-completeness audit) mounts by default — no host menu code.
       spinSkin: art.spinSkin,
       icons: art.icons,
     });
     const ui = hud.ui;
+    // Keep the declared facts in lockstep with the AUTHORITATIVE session RTP — the
+    // rules' {{rtp.*}} tokens and the mode-stats grid re-render from this merge.
+    if (session.rtp != null) {
+      ui.declareFacts({ modes: [{ id: 'base', name: 'Base game', rtp: session.rtp }, { id: 'vortex', name: 'Vortex', rtp: session.rtp }] });
+    }
 
     // ── Stake Engine compliance ──────────────────────────────────────────────
     // Apply the RGS jurisdiction switchboard (disable features + reveal the
@@ -371,18 +365,6 @@ export async function compose({
     );
     hudDisposers.push(closeBuyModal);
 
-    // The ☰ menu: a white HTML sheet (Settings → Paytable → Rules), opened by the
-    // canvas menu button via ui.settingsPanel. White + gold, theme-independent,
-    // matching the buy-feature modal.
-    const closeMenu = mountHtmlMenu(scene.app, hud, {
-      gameName: GAME.title,
-      paytable: [
-        { symbol: '2-digit number', payouts: '2×' },
-        { symbol: '3-digit number', payouts: '10×' },
-      ],
-      rules: menuRules(session),
-    });
-    hudDisposers.push(closeMenu);
     hudDisposers.push(
       ui.on('autoplayStarted', async () => {
         while (ui.autoplay.isActive) {

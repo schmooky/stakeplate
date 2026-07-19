@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stakeplate · rules editor</title>
+<style>
+  :root { --accent:#d99000; --accent-text:#1a1200; --surface:#ffffff; --surface-alt:#eef1f6; --text:#181b20; --dim:#5b6472; --red:#b31d1d; --amber:#b07d09; --green:#1c7c3c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; background:#e6e9ef; color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--surface); border-bottom:2px solid #000; }
+  header h1 { font-size:15px; margin:0; letter-spacing:.5px; }
+  header .path { color:var(--dim); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .btn { border:2px solid #000; background:var(--surface); border-radius:8px; padding:7px 14px; font-weight:800; cursor:pointer; }
+  .btn:hover { background:var(--surface-alt); }
+  .btn.primary { background:var(--accent); color:var(--accent-text); }
+  #dirty { width:10px; height:10px; border-radius:99px; background:#bbb; }
+  #dirty.on { background:var(--red); }
+  main { flex:1; display:grid; grid-template-columns: 190px 1fr 380px; gap:12px; padding:12px; min-height:0; }
+  .col { background:var(--surface); border:2px solid #000; border-radius:12px; display:flex; flex-direction:column; min-height:0; }
+  .col h2 { margin:0; padding:10px 14px; font-size:12px; letter-spacing:1.2px; text-transform:uppercase; border-bottom:1px solid #d6dae2; }
+  .scroll { overflow-y:auto; padding:10px; flex:1; }
+  /* palette */
+  .pal { display:flex; flex-direction:column; gap:6px; }
+  .pal .chip { border:2px solid #000; border-radius:8px; padding:7px 10px; background:var(--surface-alt); font-weight:700; cursor:grab; user-select:none; }
+  .pal .chip:hover { background:#e2e7f0; }
+  .pal .hint { font-size:11px; color:var(--dim); margin-top:8px; }
+  /* block list */
+  .card { border:2px solid #000; border-radius:10px; margin:0 0 10px; background:var(--surface); }
+  .card.dragging { opacity:.35; }
+  .card .head { display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid #e2e6ee; cursor:grab; }
+  .card .kind { font-size:11px; font-weight:900; letter-spacing:1px; text-transform:uppercase; background:#000; color:#fff; border-radius:6px; padding:2px 8px; }
+  .card .id { font-size:11px; color:var(--dim); flex:1; }
+  .card .del { border:0; background:none; color:var(--red); font-weight:900; cursor:pointer; font-size:14px; }
+  .card .fields { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+  .card textarea, .card input[type=text], .card input[type=number], .card select { width:100%; border:1.5px solid #b8bfca; border-radius:6px; padding:6px 8px; font:inherit; background:#fbfcfe; }
+  .card textarea { resize:vertical; min-height:38px; }
+  .card label { font-size:11px; font-weight:800; color:var(--dim); letter-spacing:.5px; }
+  .row { display:flex; gap:6px; align-items:center; }
+  .row > * { flex:1; }
+  .dropline { height:4px; border-radius:2px; margin:-3px 0 7px; }
+  .dropline.on { background:var(--accent); }
+  /* right tabs */
+  .tabs { display:flex; border-bottom:1px solid #d6dae2; }
+  .tabs button { flex:1; border:0; background:none; padding:9px 4px; font-weight:800; font-size:12px; cursor:pointer; color:var(--dim); border-bottom:3px solid transparent; }
+  .tabs button.on { color:var(--text); border-bottom-color:var(--accent); }
+  .issue { border-left:4px solid var(--red); background:#fbecec; padding:7px 10px; border-radius:6px; margin:0 0 8px; font-size:13px; }
+  .issue.rec { border-left-color:var(--amber); background:#fbf4e4; }
+  .issue.spec { border-left-color:#8a93a3; background:var(--surface-alt); }
+  .allgood { color:var(--green); font-weight:800; padding:8px 2px; }
+  .tok { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-bottom:1px solid #e6eaf1; cursor:pointer; font-size:13px; }
+  .tok:hover { background:var(--surface-alt); }
+  .tok code { color:var(--accent); font-weight:700; }
+  .tok .val { color:var(--dim); }
+  .tr-item { margin:0 0 10px; }
+  .tr-item .src { font-size:12px; color:var(--dim); margin:0 0 3px; white-space:pre-wrap; }
+  .tr-item textarea { width:100%; border:1.5px solid #b8bfca; border-radius:6px; padding:6px 8px; font:inherit; min-height:36px; }
+  .tr-item.missing textarea { border-color:var(--amber); }
+  #factsTa { width:100%; min-height:300px; font:12px/1.5 ui-monospace, monospace; border:1.5px solid #b8bfca; border-radius:6px; padding:8px; }
+  .facts-err { color:var(--red); font-size:12px; margin-top:6px; }
+  /* preview (mirrors the in-game white menu) */
+  .pv { font-family:inherit; }
+  .pv .sec { display:flex; align-items:center; gap:12px; margin:18px 0 10px; font-weight:800; letter-spacing:1px; }
+  .pv .sec::before, .pv .sec::after { content:""; flex:1; height:2px; background:#333; border-radius:2px; }
+  .pv h4 { margin:14px 0 6px; font-size:14px; }
+  .pv p { color:var(--dim); margin:8px 0; } .pv p b { color:var(--text); }
+  .pv .legal { font-size:11px; color:var(--dim); opacity:.85; }
+  .pv ul, .pv ol { color:var(--dim); padding-left:20px; } .pv li b { color:var(--text); }
+  .pv dl { display:grid; grid-template-columns:1fr; margin:8px 0; }
+  .pv dl > div { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #dfe3ea; }
+  .pv dt { color:var(--dim); } .pv dd { margin:0; font-weight:700; }
+  .pv .co { border-left:4px solid var(--accent); background:#faf3e2; border-radius:8px; padding:9px 12px; margin:10px 0; }
+  .pv .co b { color:var(--amber); }
+  .pv img { max-width:100%; height:auto; display:block; margin:8px 0; }
+  .pv table { width:100%; border-collapse:collapse; font-size:13px; }
+  .pv th { text-align:left; border-bottom:2px solid #aab; padding:5px; } .pv td { border-bottom:1px solid #dde; padding:5px; }
+  .pv hr { border:0; border-top:1px solid #ccd; }
+  .locbar { display:flex; gap:6px; align-items:center; padding:8px 10px; border-bottom:1px solid #d6dae2; }
+  .locbar select, .locbar input { border:1.5px solid #b8bfca; border-radius:6px; padding:5px 8px; font:inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>stakeplate · rules editor</h1>
+  <span class="path" id="path"></span>
+  <span id="dirty" title="unsaved changes"></span>
+  <button class="btn primary" id="save">Save</button>
+</header>
+<main>
+  <div class="col">
+    <h2>Blocks</h2>
+    <div class="scroll">
+      <div class="pal" id="palette"></div>
+      <p class="hint">Drag a block into the document, or click to append. Drag cards to reorder.</p>
+    </div>
+  </div>
+  <div class="col">
+    <h2>Document</h2>
+    <div class="scroll" id="list"></div>
+  </div>
+  <div class="col">
+    <div class="tabs" id="tabs"></div>
+    <div class="locbar" id="locbar" hidden>
+      <label>Locale</label>
+      <select id="loc"></select>
+      <input id="newloc" placeholder="add: ru" size="6">
+      <button class="btn" id="addloc">+</button>
+    </div>
+    <div class="scroll" id="panel"></div>
+  </div>
+</main>
+<script>
+(() => {
+  'use strict';
+  // ── state ──────────────────────────────────────────────────────────────────
+  let doc = null;           // the RulesDoc being edited
+  let vars = {};            // interpolation vars from the merged facts (server truth)
+  let facts = {};           // merged facts (server truth) — drives the preview mode-stats
+  let audit = [];           // audit findings
+  let specIssues = [];      // validateSpec findings
+  let dirty = false;
+  let tab = 'audit';
+  let trLocale = null;      // translate/preview locale (null → en source)
+  const $ = (s) => document.querySelector(s);
+
+  const KINDS = ['heading', 'subheading', 'text', 'steps', 'callout', 'stat-grid', 'mode-stats', 'table', 'image', 'legal', 'divider'];
+
+  const uid = () => {
+    let n = 1;
+    const used = new Set((doc.blocks ?? []).map((b) => b.id));
+    while (used.has(`r-${n}`)) n++;
+    return `r-${n}`;
+  };
+  const defaults = (kind) => {
+    const id = uid();
+    switch (kind) {
+      case 'heading': return { kind, id, text: 'Section title' };
+      case 'subheading': return { kind, id, text: 'Subsection' };
+      case 'text': return { kind, id, text: 'Describe the feature. Tokens like {{rtp.base}} resolve from the game facts.' };
+      case 'steps': return { kind, id, ordered: false, items: ['First step', 'Second step'] };
+      case 'callout': return { kind, id, tone: 'info', title: 'Note', text: 'Something worth highlighting.' };
+      case 'stat-grid': return { kind, id, items: [{ label: 'Lines', value: '20' }] };
+      case 'mode-stats': return { kind, id };
+      case 'table': return { kind, id, columns: ['Symbol', '3', '4', '5'], rows: [['Wild', '5x', '20x', '50x']] };
+      case 'image': return { kind, id, src: 'https://placehold.co/1000x180', width: 1000, height: 180, alt: '' };
+      case 'legal': return { kind, id, text: 'Malfunction voids all wins and plays.' };
+      default: return { kind: 'divider', id };
+    }
+  };
+
+  // ── server io ──────────────────────────────────────────────────────────────
+  const api = (path, body) => fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined).then((r) => r.json());
+  let auditTimer = 0;
+  const changed = (structural = true) => {
+    dirty = true;
+    $('#dirty').classList.add('on');
+    clearTimeout(auditTimer);
+    auditTimer = setTimeout(refreshAnalysis, 350);
+    if (structural) renderList();
+    renderPanel();
+  };
+  async function refreshAnalysis() {
+    const r = await api('/api/audit', { doc, locale: trLocale ?? 'en' });
+    if (r.error) return;
+    audit = r.audit; specIssues = r.specIssues; vars = r.vars; facts = r.facts;
+    renderTabs(); if (tab === 'audit' || tab === 'tokens' || tab === 'preview') renderPanel();
+  }
+  async function save() {
+    const r = await api('/api/save', { doc });
+    if (r.ok) { dirty = false; $('#dirty').classList.remove('on'); }
+    else alert('Save failed: ' + (r.error ?? 'unknown'));
+  }
+  $('#save').addEventListener('click', save);
+  window.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); } });
+  window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const interp = (s) => String(s).replace(/\{\{([\w.-]+)\}\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
+  const translated = (s) => (trLocale && doc.messages?.[trLocale]?.[s]) || s;
+  const rich = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+
+  // Every translatable source string in the document, in order, de-duplicated.
+  function sourceStrings() {
+    const out = [];
+    const seen = new Set();
+    const add = (t) => { if (typeof t === 'string' && t.trim() && !seen.has(t)) { seen.add(t); out.push(t); } };
+    for (const b of doc.blocks) {
+      if ('text' in b) add(b.text);
+      if ('title' in b) add(b.title);
+      if (b.kind === 'steps') (b.items ?? []).forEach(add);
+      if (b.kind === 'stat-grid') (b.items ?? []).forEach((it) => { add(it.label); add(it.value); });
+      if (b.kind === 'mode-stats') (b.extras ?? []).forEach((it) => { add(it.label); add(it.value); });
+      if (b.kind === 'table') { (b.columns ?? []).forEach(add); (b.rows ?? []).forEach((r) => r.forEach(add)); }
+    }
+    return out;
+  }
+
+  // ── palette ────────────────────────────────────────────────────────────────
+  function renderPalette() {
+    $('#palette').innerHTML = KINDS.map((k) => `<div class="chip" draggable="true" data-kind="${k}">${k}</div>`).join('');
+    document.querySelectorAll('#palette .chip').forEach((el) => {
+      el.addEventListener('click', () => { doc.blocks.push(defaults(el.dataset.kind)); changed(); });
+      el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/x-kind', el.dataset.kind));
+    });
+  }
+
+  // ── block list ─────────────────────────────────────────────────────────────
+  const fieldHtml = (b) => {
+    const ta = (name, val, label) => `<label>${label ?? name}</label><textarea data-f="${name}">${esc(val ?? '')}</textarea>`;
+    const inp = (name, val, label, type = 'text') => `<label>${label ?? name}</label><input type="${type}" data-f="${name}" value="${esc(val ?? '')}">`;
+    const lines = (name, arr, label, map) => `<label>${label}</label><textarea data-f="${name}">${esc((arr ?? []).map(map).join('\n'))}</textarea>`;
+    let f = '';
+    switch (b.kind) {
+      case 'heading': case 'subheading': case 'legal': case 'text': f = ta('text', b.text, 'copy (en · **bold** · {{tokens}})'); break;
+      case 'steps':
+        f = `<div class="row"><label><input type="checkbox" data-f="ordered"${b.ordered ? ' checked' : ''}> ordered</label></div>` +
+            lines('items', b.items, 'one step per line', (s) => s);
+        break;
+      case 'callout':
+        f = `<label>tone</label><select data-f="tone">${['info', 'bonus', 'warning'].map((t) => `<option${t === (b.tone ?? 'info') ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
+            inp('title', b.title, 'title') + ta('text', b.text, 'copy');
+        break;
+      case 'stat-grid': f = lines('items', b.items, 'label | value — one per line', (it) => `${it.label} | ${it.value}`); break;
+      case 'mode-stats': f = `<p style="font-size:12px;color:var(--dim);margin:2px 0">Auto-renders every declared mode's RTP / Max win from the game facts.</p>` + lines('extras', b.extras, 'extra rows: label | value (optional)', (it) => `${it.label} | ${it.value}`); break;
+      case 'table':
+        f = lines('columns', [b.columns ?? []], 'columns: a | b | c', (r) => (r ?? []).join(' | ')) +
+            lines('rows', b.rows, 'rows: a | b | c — one per line', (r) => r.join(' | '));
+        break;
+      case 'image': f = inp('src', b.src, 'src') + `<div class="row">${inp('width', b.width, 'width', 'number')}${inp('height', b.height, 'height', 'number')}</div>` + inp('alt', b.alt, 'alt'); break;
+      default: f = '';
+    }
+    return f + inp('covers', (b.covers ?? []).join(', '), 'covers (audit topics, comma-sep — e.g. rtp:base, freespins)');
+  };
+
+  function readField(b, name, el) {
+    const v = el.type === 'checkbox' ? el.checked : el.value;
+    const pair = (line) => { const i = line.indexOf('|'); return { label: (i < 0 ? line : line.slice(0, i)).trim(), value: (i < 0 ? '' : line.slice(i + 1)).trim() }; };
+    switch (name) {
+      case 'ordered': b.ordered = !!v; break;
+      case 'items':
+        if (b.kind === 'steps') b.items = String(v).split('\n').filter((s) => s.trim());
+        else b.items = String(v).split('\n').filter((s) => s.trim()).map(pair);
+        break;
+      case 'extras': { const rows = String(v).split('\n').filter((s) => s.trim()).map(pair); if (rows.length) b.extras = rows; else delete b.extras; break; }
+      case 'columns': b.columns = String(v).split('|').map((s) => s.trim()).filter(Boolean); break;
+      case 'rows': b.rows = String(v).split('\n').filter((s) => s.trim()).map((line) => line.split('|').map((s) => s.trim())); break;
+      case 'width': case 'height': b[name] = Number(v) || undefined; break;
+      case 'covers': { const tags = String(v).split(',').map((s) => s.trim()).filter(Boolean); if (tags.length) b.covers = tags; else delete b.covers; break; }
+      default: b[name] = v;
+    }
+  }
+
+  let dragIndex = -1;
+  function renderList() {
+    const list = $('#list');
+    list.innerHTML = doc.blocks.map((b, i) => `
+      <div class="dropline" data-at="${i}"></div>
+      <div class="card" draggable="true" data-i="${i}">
+        <div class="head"><span class="kind">${b.kind}</span><span class="id">${esc(b.id)}</span><button class="del" title="delete">✕</button></div>
+        <div class="fields">${fieldHtml(b)}</div>
+      </div>`).join('') + `<div class="dropline" data-at="${doc.blocks.length}"></div>`;
+
+    list.querySelectorAll('.card').forEach((card) => {
+      const i = Number(card.dataset.i);
+      const b = doc.blocks[i];
+      card.querySelector('.del').addEventListener('click', () => { doc.blocks.splice(i, 1); changed(); });
+      card.querySelectorAll('[data-f]').forEach((el) => {
+        el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', () => { readField(b, el.dataset.f, el); changed(false); });
+      });
+      card.addEventListener('dragstart', (e) => { dragIndex = i; card.classList.add('dragging'); e.dataTransfer.setData('text/x-move', String(i)); });
+      card.addEventListener('dragend', () => { dragIndex = -1; card.classList.remove('dragging'); });
+    });
+    list.querySelectorAll('.dropline').forEach((dl) => {
+      dl.addEventListener('dragover', (e) => { e.preventDefault(); dl.classList.add('on'); });
+      dl.addEventListener('dragleave', () => dl.classList.remove('on'));
+      dl.addEventListener('drop', (e) => {
+        e.preventDefault(); dl.classList.remove('on');
+        let at = Number(dl.dataset.at);
+        const kind = e.dataTransfer.getData('text/x-kind');
+        if (kind) { doc.blocks.splice(at, 0, defaults(kind)); changed(); return; }
+        if (dragIndex < 0) return;
+        const [moved] = doc.blocks.splice(dragIndex, 1);
+        if (at > dragIndex) at--;
+        doc.blocks.splice(at, 0, moved);
+        changed();
+      });
+    });
+  }
+
+  // ── right panel ────────────────────────────────────────────────────────────
+  const TABS = { audit: 'Audit', tokens: 'Tokens', translate: 'Translate', facts: 'Facts', preview: 'Preview' };
+  function renderTabs() {
+    const req = audit.filter((i) => i.level === 'required').length;
+    const badge = req ? ` (${req})` : '';
+    $('#tabs').innerHTML = Object.entries(TABS).map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}${k === 'audit' ? badge : ''}</button>`).join('');
+    document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.t; renderTabs(); renderPanel(); }));
+    $('#locbar').hidden = !(tab === 'translate' || tab === 'preview');
+  }
+
+  function renderLocales() {
+    const locs = Object.keys(doc.messages ?? {}).filter((l) => l !== 'en');
+    $('#loc').innerHTML = ['<option value="">en (source)</option>', ...locs.map((l) => `<option value="${l}"${trLocale === l ? ' selected' : ''}>${l}</option>`)].join('');
+  }
+  $('#loc').addEventListener('change', (e) => { trLocale = e.target.value || null; refreshAnalysis(); renderPanel(); });
+  $('#addloc').addEventListener('click', () => {
+    const code = $('#newloc').value.trim();
+    if (!code || code === 'en') return;
+    doc.messages = doc.messages ?? {};
+    doc.messages[code] = doc.messages[code] ?? {};
+    trLocale = code; $('#newloc').value = '';
+    renderLocales(); changed(false); renderPanel();
+  });
+
+  function renderPanel() {
+    const p = $('#panel');
+    if (tab === 'audit') {
+      const req = audit.filter((i) => i.level === 'required');
+      const rec = audit.filter((i) => i.level === 'recommended');
+      const spec = specIssues.filter((i) => i.level === 'error');
+      p.innerHTML =
+        (req.length || rec.length || spec.length ? '' : '<div class="allgood">✓ Rules declare everything the configuration demands.</div>') +
+        spec.map((i) => `<div class="issue spec"><b>${esc(i.path)}</b> — ${esc(i.message)}</div>`).join('') +
+        req.map((i) => `<div class="issue">${esc(i.message)}</div>`).join('') +
+        (rec.length ? `<div style="font-weight:800;color:var(--amber);margin:8px 0 6px">Highly recommended</div>` + rec.map((i) => `<div class="issue rec">${esc(i.message)}</div>`).join('') : '');
+    } else if (tab === 'tokens') {
+      p.innerHTML = `<p style="font-size:12px;color:var(--dim)">Click to copy. Tokens resolve from the game facts — copy that states numbers via tokens can never drift from the config.</p>` +
+        Object.entries(vars).map(([k, v]) => `<div class="tok" data-k="${esc(k)}"><code>{{${esc(k)}}}</code><span class="val">${esc(String(v))}</span></div>`).join('');
+      p.querySelectorAll('.tok').forEach((el) => el.addEventListener('click', () => navigator.clipboard?.writeText(`{{${el.dataset.k}}}`)));
+    } else if (tab === 'translate') {
+      renderLocales();
+      if (!trLocale) { p.innerHTML = '<p style="color:var(--dim)">Pick or add a locale above. The English copy in the blocks is the source — each string below stores its translation (same {{tokens}} work).</p>'; return; }
+      const dict = doc.messages[trLocale] ?? {};
+      p.innerHTML = sourceStrings().map((s, i) => `
+        <div class="tr-item ${dict[s] ? '' : 'missing'}">
+          <div class="src">${esc(s)}</div>
+          <textarea data-src="${esc(s)}" placeholder="${esc(trLocale)} translation…">${esc(dict[s] ?? '')}</textarea>
+        </div>`).join('');
+      p.querySelectorAll('textarea[data-src]').forEach((el) => el.addEventListener('input', () => {
+        const src = el.dataset.src;
+        doc.messages[trLocale] = doc.messages[trLocale] ?? {};
+        if (el.value.trim()) doc.messages[trLocale][src] = el.value;
+        else delete doc.messages[trLocale][src];
+        el.parentElement.classList.toggle('missing', !el.value.trim());
+        dirty = true; $('#dirty').classList.add('on');
+        clearTimeout(auditTimer); auditTimer = setTimeout(refreshAnalysis, 350);
+      }));
+    } else if (tab === 'facts') {
+      p.innerHTML = `<p style="font-size:12px;color:var(--dim)">The game facts this document is authored against (modes with RTP + max win, free spins, volatility, cap). The audit + tokens derive from them; <code>--facts</code> merges the game's own export on top.</p>
+        <textarea id="factsTa">${esc(JSON.stringify(doc.facts ?? {}, null, 2))}</textarea>
+        <div class="facts-err" id="factsErr"></div>`;
+      $('#factsTa').addEventListener('input', () => {
+        try {
+          doc.facts = JSON.parse($('#factsTa').value);
+          $('#factsErr').textContent = '';
+          dirty = true; $('#dirty').classList.add('on');
+          clearTimeout(auditTimer); auditTimer = setTimeout(refreshAnalysis, 350);
+        } catch (e) { $('#factsErr').textContent = String(e.message); }
+      });
+    } else if (tab === 'preview') {
+      renderLocales();
+      const r = (s) => rich(interp(translated(s)));
+      const modeRows = () => {
+        const rows = [];
+        for (const m of facts.modes ?? []) {
+          if (m.rtp != null) rows.push([`RTP · ${m.name}`, `${m.rtp.toFixed(2)}%`]);
+          if (m.maxWinX != null) rows.push([`Max win · ${m.name}`, `${m.maxWinX.toLocaleString('en-US')}×`]);
+        }
+        if (facts.volatility) rows.push(['Volatility', facts.volatility]);
+        if (facts.maxWinCapX != null) rows.push(['Round cap', `${facts.maxWinCapX.toLocaleString('en-US')}×`]);
+        return rows;
+      };
+      p.innerHTML = `<div class="pv">` + doc.blocks.map((b) => {
+        switch (b.kind) {
+          case 'heading': return `<div class="sec"><span>${r(b.text)}</span></div>`;
+          case 'subheading': return `<h4>${r(b.text)}</h4>`;
+          case 'text': return `<p>${r(b.text)}</p>`;
+          case 'legal': return `<p class="legal">${r(b.text)}</p>`;
+          case 'steps': { const items = (b.items ?? []).map((s) => `<li>${r(s)}</li>`).join(''); return b.ordered ? `<ol>${items}</ol>` : `<ul>${items}</ul>`; }
+          case 'callout': return `<div class="co">${b.title ? `<b>${r(b.title)}</b> ` : ''}${r(b.text)}</div>`;
+          case 'stat-grid': return `<dl>${(b.items ?? []).map((it) => `<div><dt>${r(it.label)}</dt><dd>${r(it.value)}</dd></div>`).join('')}</dl>`;
+          case 'mode-stats': return `<dl>${[...modeRows(), ...((b.extras ?? []).map((e2) => [e2.label, e2.value]))].map(([l, v]) => `<div><dt>${r(l)}</dt><dd>${r(v)}</dd></div>`).join('')}</dl>`;
+          case 'table': { const head = b.columns?.length ? `<tr>${b.columns.map((c) => `<th>${r(c)}</th>`).join('')}</tr>` : ''; return `<table>${head}${(b.rows ?? []).map((row) => `<tr>${row.map((c) => `<td>${r(c)}</td>`).join('')}</tr>`).join('')}</table>`; }
+          case 'image': return `<img src="${esc(b.src)}" alt="${esc(b.alt ?? '')}">`;
+          case 'divider': return '<hr>';
+          default: return '';
+        }
+      }).join('') + `</div>`;
+    }
+  }
+
+  // ── boot ───────────────────────────────────────────────────────────────────
+  (async () => {
+    const s = await api('/api/state');
+    doc = s.doc; vars = s.vars; audit = s.audit; specIssues = s.specIssues; facts = s.facts;
+    $('#path').textContent = s.path;
+    renderPalette(); renderList(); renderTabs(); renderLocales(); renderPanel();
+  })();
+})();
+</script>
+</body>
+</html>

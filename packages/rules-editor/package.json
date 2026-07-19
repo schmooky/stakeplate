@@ -1,0 +1,42 @@
+{
+  "name": "@stakeplate/rules-editor",
+  "version": "0.1.0",
+  "description": "npx-runnable visual editor for open-slot-ui RULES DOCUMENTS — drag blocks, edit interpolatable ({{rtp.base}}) localizable copy, live compliance audit, save one portable rules.doc.json your game consumes with applyRulesDoc()",
+  "keywords": [
+    "stake",
+    "stake-engine",
+    "slot",
+    "rules",
+    "i18n",
+    "editor",
+    "open-slot-ui",
+    "stakeplate"
+  ],
+  "license": "MIT",
+  "author": "schmooky and the stakeplate contributors",
+  "homepage": "https://github.com/schmooky/stakeplate/tree/main/packages/rules-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/schmooky/stakeplate.git",
+    "directory": "packages/rules-editor"
+  },
+  "bugs": {
+    "url": "https://github.com/schmooky/stakeplate/issues"
+  },
+  "type": "module",
+  "bin": {
+    "stakeplate-rules": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "editor.html",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@open-slot-ui/core": "^0.9.0"
+  }
+}

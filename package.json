@@ -14,7 +14,8 @@
     "typecheck": "pnpm -r typecheck",
     "game:dev": "pnpm --filter game dev",
     "game:build": "pnpm --filter game build",
-    "rgs:dev": "pnpm --filter rgs-emulator dev"
+    "rgs:dev": "pnpm --filter rgs-emulator dev",
+    "rules": "node packages/rules-editor/cli.js apps/game/src/rules.doc.json"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
