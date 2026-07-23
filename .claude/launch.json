@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "stakeplate",
+      "name": "basic-slot",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "game", "dev"],
-      "port": 5173
+      "runtimeArgs": ["--filter", "basic-slot", "dev"],
+      "port": 5280
     }
   ]
 }

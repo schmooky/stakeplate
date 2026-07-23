@@ -6,7 +6,7 @@ i18next-compatible per-locale copy with `{{rtp.base}}`-style interpolation token
 and the game facts they resolve from.
 
 ```bash
-npx @stakeplate/rules-editor apps/game/src/rules.doc.json
+npx @stakeplate/rules-editor src/rules.doc.json
 ```
 
 The editor opens in your browser:

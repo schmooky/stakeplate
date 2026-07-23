@@ -4,20 +4,16 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
-  "description": "Stake Engine slot built on slotplate architecture: pixi-reels reels, open-ui HUD, Stake networking, local RGS emulator. First game: the Lucky-Magnet digits & magnet design.",
+  "description": "Monorepo for @stakeplate/core — a batteries-included Stake Engine game core (RGS transport, boot, round FSM, HUD binding, audio, i18n, compliant rules) — plus create-stakeplate, the rules editor, a local RGS emulator, and the basic-slot example.",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "concurrently -n rgs,game -c magenta,cyan \"pnpm --filter rgs-emulator dev\" \"pnpm --filter game dev\"",
+    "dev": "pnpm --filter basic-slot dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "game:dev": "pnpm --filter game dev",
-    "game:build": "pnpm --filter game build",
-    "rgs:dev": "pnpm --filter rgs-emulator dev",
-    "rules": "node packages/rules-editor/cli.js apps/game/src/rules.doc.json"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.0"
+    "example:dev": "pnpm --filter basic-slot dev",
+    "example:build": "pnpm --filter basic-slot build",
+    "rgs:dev": "pnpm --filter rgs-emulator dev"
   }
 }
