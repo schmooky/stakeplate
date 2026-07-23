@@ -64,7 +64,7 @@ cd my-game && npm install && npm run dev   # грузится + крутится
 ```ts
 import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
 import { MiniSlot } from './MiniSlot';       // ваша pixi-сцена
-import { DemoNetwork } from './demoNetwork';  // в проде — не нужен, ядро само идёт в RGS
+import { DemoNetwork } from './demoNetwork';  // только для голого `pnpm dev`; при реальном запуске ядро само идёт в RGS
 
 type Ev = { grid: string[][] };              // тип событий book — объявляется ОДИН раз
 type Data = { grid: string[][]; win: boolean };
@@ -188,6 +188,7 @@ type InterpretBook<T, E> = (raw: Round<E>, info: RoundInfo) => T;
 |---|---|
 | `authenticate {sessionID, **language**}`, `play {mode, **currency**, amount}`, end-round, event, replay-GET | **ядро** (транспорт) |
 | Разбор всех launch-параметров (rgs_url, sessionID, lang, currency, social, device, replay-набор) | **ядро** (runtime) |
+| Выбор транспорта: реальный `rgs_url` → **настоящий RGS** (в т.ч. `demo=true` — это fun-play кошелёк, НЕ фейк-бэкенд); без `rgs_url` или `?mock=true` → мок. Хелпер `isStakeLaunch()` | **ядро** (`createNetwork`) |
 | Boot: auth → конфиг HUD → **восстановление активного раунда** → **блокирующий boot-error** | **ядро** (boot) |
 | **Replay** (модалка → чистый раунд → модалка, UI заблокирован) | **ядро** ведёт, HUD рисует |
 | Юрисдикция, `minimumRoundDuration`, RGS-код → модалка, `reportRound`/net | **ядро** связывает, HUD показывает |

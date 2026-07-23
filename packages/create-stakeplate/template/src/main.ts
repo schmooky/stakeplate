@@ -3,7 +3,7 @@
 // a config, a pure interpretBook (RGS book → your model), a mountView (your pixi scene) and
 // a Present phase (animate the round). See https://github.com/schmooky/stakeplate.
 
-import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
+import { createStakeGame, isStakeLaunch, roundEvents, type Phase } from '@stakeplate/core';
 import { createGameAudio } from '@stakeplate/core/audio';
 import { Scene } from './Scene';
 import { DemoNetwork } from './demoNetwork';
@@ -36,6 +36,18 @@ const present: Phase<Data, Scene, Ev> = {
   },
 };
 
+// NETWORK. When the Stake platform launches your game it opens it with a real `rgs_url` (the
+// dev dashboard's "local redirect" does this too — the URL looks like
+//   http://localhost:5173/?sessionID=…&rgs_url=rgsd.stake-engine.com&lang=en&currency=USD&demo=true
+// ) and the core connects to the REAL Stake RGS: it authenticates with the launch `sessionID`,
+// pulls the real balance/config/bet-ladder, and spins + buys features with real requests. Note
+// `demo=true` is Stake FUN-PLAY (a demo wallet on the real RGS), NOT a signal to fake the backend.
+// Bare `pnpm dev` (no launch params) has no backend, so we fall back to the scripted mock below
+// to let you click around. Delete this line + demoNetwork.ts for a real-RGS-only build.
+const demoNetwork = isStakeLaunch()
+  ? undefined
+  : new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, modes: { base: 1 } });
+
 const game = createStakeGame<Data, Scene, Ev>({
   // The bet ladder, default bet and buy-confirm come from the RGS/jurisdiction, NOT here.
   config: { title: '{{name}}', rtp: 96, rules: rulesMenu, socialMessages },
@@ -52,9 +64,8 @@ const game = createStakeGame<Data, Scene, Ev>({
   mountView: (host) => new Scene(host),
   phases: [present],
   audio,
-  // LOCAL DEV ONLY — a scripted mock RGS. Delete this line (and demoNetwork.ts) for production;
-  // the core then talks to the real Stake RGS from the `rgs_url` launch param.
-  network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, modes: { base: 1 } }),
+  // undefined on a real Stake launch (see above) → the core uses the real RGS from `rgs_url`.
+  ...(demoNetwork ? { network: demoNetwork } : {}),
   hudHost: document.getElementById('hud')!,
   sceneHost: document.getElementById('scene')!,
 });

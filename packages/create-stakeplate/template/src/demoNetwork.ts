@@ -1,8 +1,9 @@
 // A tiny "RGS" for LOCAL DEV: extends the core's authoritative MockNetworkManager and scripts
 // a random win (with a symbol grid in the book event) on every play.
 //
-// In production DELETE this file and remove `network:` from createStakeGame — the core then
-// connects to the real Stake RGS from the `rgs_url` launch param automatically.
+// main.ts uses this ONLY for bare `npm run dev` (no backend). A real Stake launch (a real
+// `rgs_url`, incl. `demo=true` fun-play) auto-connects to the real RGS — no code change. You
+// may delete this file + the `demoNetwork` block in main.ts for a real-RGS-only build.
 
 import { MockNetworkManager } from '@stakeplate/core';
 import type { PlayArgs, PlayResponse } from '@stakeplate/core';

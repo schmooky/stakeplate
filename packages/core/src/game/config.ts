@@ -28,6 +28,17 @@ export interface GameConfig {
   rtp?: number;
   /** Mode key → cost multiplier (a number) or a `ModeConfig`. `base` defaults to 1. */
   modes?: Record<string, ModeConfig | number>;
+  /**
+   * Minimum selectable bet, in MAJOR units of the account currency — an EXPLICIT client
+   * floor. Any server bet-ladder level below this is dropped from the HUD ladder, so the
+   * smallest possible win (bet × the game's minimum payout) can never round below one
+   * minimal currency unit. Set it per game to your smallest legal stake — e.g. `0.05` when
+   * the minimum payout is ×0.2 (0.05 × 0.2 = 0.01 = one cent). `undefined` → derive it from
+   * the currency (5 minimal units — a safe default for a ×0.2 minimum payout). The server
+   * ladder stays authoritative for the LEVELS offered; this only trims the low end + snaps
+   * the default up to the first legal level.
+   */
+  minBet?: number;
   /** Rules/info menu for the HUD (`@open-slot-ui` `MenuSpec`) — build it with `@stakeplate/core/rules` `buildRules`. */
   rules?: unknown;
   /** i18n messages per locale (`{ en: { key: text }, es: {…} }`) for the HUD + rules text. */

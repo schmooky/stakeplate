@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@stakeplate/core": "^0.2.0",
+    "@stakeplate/core": "^0.4.0",
     "@open-slot-ui/core": "^0.8.3",
     "@open-slot-ui/pixi": "^0.8.3",
     "@schmooky/zvuk": "^1.13.0",

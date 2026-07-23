@@ -55,6 +55,31 @@ config.rules = built.menu;                      // → the white HTML menu
 config.socialMessages = { en: built.socialEn }; // auto-derived social wording
 ```
 
+## Networking — real RGS vs. the mock
+
+`createStakeGame` picks the transport from the **launch URL**, so the same build runs
+locally and on Stake with no code change:
+
+| Launch | Transport |
+|---|---|
+| a real `rgs_url` is present (a Stake launch, incl. the dashboard's "local redirect") | the **real Stake RGS** — authenticates with the launch `sessionID`, pulls the real balance/config, spins + buys with real requests |
+| `?demo=true` **with** a real `rgs_url` (Stake **fun-play**) | still the **real RGS** — `demo` is a demo *wallet*, not a fake backend |
+| no `rgs_url` (bare `pnpm dev`), or `?mock=true` | the in-process **mock RGS** |
+
+So a game gates its local dev mock on **`!isStakeLaunch()`** (a `readRuntime` helper) and
+passes `network:` only in that case; a real launch then falls through to the real RGS. The
+Stake "local redirect" opens a tab like
+`…?sessionID=…&rgs_url=rgsd.stake-engine.com&lang=en&currency=USD&demo=true` — and that
+authorizes + plays against `rgsd.stake-engine.com`.
+
+```ts
+import { createStakeGame, isStakeLaunch } from '@stakeplate/core';
+createStakeGame({
+  /* … */
+  ...(isStakeLaunch() ? {} : { network: myLocalMock }), // real RGS on a Stake launch
+});
+```
+
 ## Subpaths
 
 - `@stakeplate/core` — the one-call API + engine (turbo, autoplay, buy-features).

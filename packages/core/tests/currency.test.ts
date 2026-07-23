@@ -25,4 +25,17 @@ describe('currencyFor — 3-decimal fiat the lib table lacks', () => {
   it('falls back to 2 decimals for an unknown code', () => {
     expect(currencyFor('ABC').decimals).toBe(2);
   });
+
+  it('applies the approval symbol fixes (DKK → "KR", case-insensitive) while keeping 2 dp', () => {
+    const dkk = currencyFor('DKK');
+    expect(dkk.symbol).toBe('KR'); // lib ships lowercase "kr"
+    expect(dkk.decimals).toBe(2);
+    expect(currencyFor('dkk').symbol).toBe('KR');
+    expect(formatAmount(8, dkk)).toMatch(/\bKR\b/);
+    expect(formatAmount(8, dkk)).not.toMatch(/kr/); // never the lowercase form
+  });
+
+  it('leaves Taiwan Dollar as the accepted "NT$" (no override needed)', () => {
+    expect(currencyFor('TWD').symbol).toBe('NT$');
+  });
 });

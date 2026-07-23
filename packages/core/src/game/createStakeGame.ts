@@ -92,6 +92,49 @@ export interface CreateStakeGameOptions<T = unknown, V = unknown, E = unknown> {
  */
 const STAKE_CONFIRM_ABOVE_COST = 2;
 
+/** Fallback min-payout coefficient used ONLY when `config.minBet` is unset: the
+ *  currency-derived floor is `minUnit / MIN_PAYOUT_COEF` (= 5 minimal units at 0.2). */
+const MIN_PAYOUT_COEF = 0.2;
+
+/** Persisted player UI preferences (sound mute + turbo mode). Best-effort — every access
+ *  is guarded: Safari Private Browsing, a cross-origin-iframe storage block, or a hardened
+ *  session throws on access, so this degrades to "no persistence", never into the boot. */
+const PREFS_KEY = 'stakeplate.prefs';
+interface GamePrefs {
+  muted?: boolean;
+  turbo?: number;
+}
+function readPrefs(): GamePrefs {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') as GamePrefs;
+  } catch {
+    return {};
+  }
+}
+function writePrefs(patch: GamePrefs): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...readPrefs(), ...patch }));
+  } catch {
+    /* storage disabled / full — preferences just won't persist this session */
+  }
+}
+
+/** Drop server bet-ladder levels below the minimum bet — the explicit `config.minBet`, else
+ *  the currency-derived floor (5 minimal units) — so the smallest win can't round below one
+ *  minimal unit. Never returns empty (keeps the largest level if every level is below). */
+function applyMinBet(levels: number[], minBet: number | undefined, decimals: number): number[] {
+  const minUnit = 10 ** -decimals;
+  const floor = minBet ?? minUnit / MIN_PAYOUT_COEF;
+  const filtered = levels.filter((b) => b >= floor - minUnit / 1000);
+  return filtered.length ? filtered : [Math.max(...levels)];
+}
+
+/** Snap a wanted bet up to the first ladder level that is >= it (or the closest). */
+function snapToLadder(levels: number[], want: number): number {
+  if (levels.includes(want)) return want;
+  return levels.find((b) => b >= want) ?? levels[levels.length - 1] ?? want;
+}
+
 /** Server/replay-sourced values that drive the HUD spec — never taken from the game config. */
 interface HudSpecInput {
   currency: string;
@@ -153,14 +196,20 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
 
   // The HUD spec is driven by SERVER-authoritative values (the ladder + confirm policy come
   // from `authenticate`/jurisdiction, not the game). `buildSpec` just formats them.
-  const buildSpec = (s: HudSpecInput): Record<string, unknown> => ({
+  const buildSpec = (s: HudSpecInput, extra?: { hideBalance?: boolean }): Record<string, unknown> => ({
     currency: currencyFor(s.currency),
     betLadder: { levels: s.betLevels, index: Math.max(0, s.betLevels.indexOf(s.defaultBet)) },
     rtp: s.rtp,
     game: { name: opts.config.title, version: opts.config.version ?? '1.0.0' },
     // Stake owns fullscreen in its iframe — the game must not render its own. The bonus
     // (buy-feature) button shows only when a mode is a buy/boost card — it opens the feature list.
-    controls: { fullscreen: { hidden: true }, ...(buyFeaturesOf(opts.config).length ? { bonus: { hidden: false } } : {}) },
+    // Replay mode has no wallet (it's a recorded round) — Stake approval: show NO balance
+    // readout; the round's facts live in the replay panel instead.
+    controls: {
+      fullscreen: { hidden: true },
+      ...(buyFeaturesOf(opts.config).length ? { bonus: { hidden: false } } : {}),
+      ...(extra?.hideBalance ? { balance: { hidden: true } } : {}),
+    },
     // Compliance: the buy-feature confirm threshold is jurisdiction policy, not a game knob.
     buyFeature: { confirmAboveCost: s.confirmBuyAboveCost },
     ...(opts.config.rules ? { menu: opts.config.rules } : {}),
@@ -208,7 +257,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
         loader?.setProgress(0.5);
         const cur = runtime.currency;
         const bet = runtime.replay.amount || 1; // replay carries its own bet; no ladder needed
-        hud = mountHud(app, buildSpec({ currency: cur, betLevels: [bet], defaultBet: bet, rtp: opts.config.rtp ?? 96, confirmBuyAboveCost: STAKE_CONFIRM_ABOVE_COST }), (await hudOpts()) as never);
+        hud = mountHud(app, buildSpec({ currency: cur, betLevels: [bet], defaultBet: bet, rtp: opts.config.rtp ?? 96, confirmBuyAboveCost: STAKE_CONFIRM_ABOVE_COST }, { hideBalance: true }), (await hudOpts()) as never);
         stores.session.set({ currency: cur });
         stores.balance.setBalance(0);
         stores.balance.setBet(bet);
@@ -259,12 +308,18 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     const currency = auth.balance.currency;
     const juris = auth.config.jurisdiction ?? {};
     const rtp = auth.config.rtp ?? opts.config.rtp ?? 96;
-    const betLevels = auth.config.betLevels.map((b) => b / API_AMOUNT_MULTIPLIER);
+    // Server ladder, trimmed by the client min-bet floor (explicit `config.minBet`, else the
+    // currency-derived 5-minimal-units) so the smallest possible win can't round to sub-unit.
+    const rawLevels = auth.config.betLevels.map((b) => b / API_AMOUNT_MULTIPLIER);
+    const betLevels = applyMinBet(rawLevels, opts.config.minBet, currencyFor(currency).decimals ?? 2);
     const active = auth.round;
     const activeCost = active?.active ? modeCostOf(opts.config, active.mode) : 1;
-    const defaultBet = active?.active
+    // Wanted default (restored from the active bet on resume), snapped up to the first legal
+    // (floored) level so the ladder + store agree.
+    const wantedDefault = active?.active
       ? active.amount / API_AMOUNT_MULTIPLIER / activeCost // resume: restore bet from the active amount
       : auth.config.defaultBetLevel / API_AMOUNT_MULTIPLIER;
+    const defaultBet = snapToLadder(betLevels, wantedDefault);
     const confirmBuyAboveCost = juris.confirmBuyAboveCost ?? STAKE_CONFIRM_ABOVE_COST;
 
     hud = mountHud(app, buildSpec({ currency, betLevels, defaultBet, rtp, confirmBuyAboveCost }), (await hudOpts()) as never);
@@ -312,7 +367,7 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
     disposers.push(hud.on('holdSpinStarted', () => { holdActive = true; turbo.setAutoplay(true); beginSpin(); }));
     disposers.push(hud.on('holdSpinStopped', () => { holdActive = false; turbo.setAutoplay(hud!.ui.autoplay.isActive); }));
     // Turbo speed (2-/3-mode cycler) + slam-stop (tap-to-skip the reels).
-    disposers.push(hud.on('turboChanged', (p) => { const e = p as { index?: number }; if (typeof e.index === 'number') turbo.setLevel(e.index); }));
+    disposers.push(hud.on('turboChanged', (p) => { const e = p as { index?: number }; if (typeof e.index === 'number') { turbo.setLevel(e.index); writePrefs({ turbo: e.index }); } }));
     disposers.push(hud.on('skipRequested', () => turbo.skip()));
     // Buy-feature: the bonus button opens the lib's feature-LIST modal (a card per buyable
     // mode). Two kinds of card, both routed through the jurisdiction confirm gate (no one-click
@@ -335,9 +390,19 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
       disposers.push(
         mountBuyFeatureModal(app, hud, features, {
           activation: 'single', // one ante at a time (Stake)
-          getBet: () => stores.balance.bet, // the base bet — the readout shows the boosted stake
+          // Read the BASE bet straight from the stepper CONTROL (updated synchronously by
+          // inc()/dec()) — NOT `stores.balance.bet`, which the core updates a tick later off
+          // `valueChanged`, so the modal would lag one step (first +/- press "doesn't
+          // register", +then- re-fires +). The readout still shows the boosted stake.
+          getBet: () => hud!.ui.betStepper.value,
           onBuy: (id) => {
             if (machine.current !== 'idle') return;
+            // Buying plays at the BASE bet — clear any active ante so its multiplied
+            // (emphasised, yellow) bet readout reverts to the plain base bet first.
+            if (stores.ui.activeMode) {
+              stores.ui.setActiveMode(null);
+              applyBetDisplay();
+            }
             stores.ui.setOneShotMode(id);
             beginSpin();
           },
@@ -388,14 +453,49 @@ export function createStakeGame<T = unknown, V = unknown, E = unknown>(opts: Cre
       disposers.push(bindInputSounds(audio, hud, opts.audio.inputSounds));
     }
 
-    // ── ACTIVE-ROUND RESUME: settle it + play it back, else idle ────────────────
+    // ── Persist player prefs (sound mute + turbo mode) across sessions ──────────
+    // Restore BEFORE the game is interactive so the controls boot in the saved position
+    // (setMuted also propagates to the audio mixer via bindMixerToHud's muted subscription
+    // above). turboChanged below persists the turbo mode; anon/blocked-storage is safe.
+    const prefs = readPrefs();
+    if (typeof prefs.muted === 'boolean') hud.setMuted(prefs.muted);
+    if (typeof prefs.turbo === 'number' && prefs.turbo > 0) {
+      hud.ui.turbo.setIndex(prefs.turbo);
+      turbo.setLevel(prefs.turbo);
+    }
+    disposers.push(hud.ui.muted.subscribe((m) => writePrefs({ muted: m })));
+
+    // ── ACTIVE-ROUND RESUME: settle it, land idle, then a "round in progress" modal ──
     if (active?.active) {
+      // The player refreshed while a round was still open. Settle it now (balance becomes
+      // authoritative; the bet was restored into the ladder above), land on a clean idle
+      // board, then show a NON-dismissible modal — on Continue we replay the recovered
+      // round through the game's Present phase so the player watches how it resolved before
+      // regaining control. (Not awaited — start() proceeds to fill/pop the loader; the modal
+      // shows over the game once the loader fades.)
       const end = await network.endRound();
       const raw = active as Round<E>;
       const info = roundInfo(raw, defaultBet, activeCost);
-      stores.balance.setBalance(end.balance.amount / API_AMOUNT_MULTIPLIER);
-      ctx.round = { ...info, data: opts.interpretBook(raw, info), active: false, balance: end.balance.amount / API_AMOUNT_MULTIPLIER, raw };
-      await machine.transition('present'); // view plays it back → settle → idle
+      const settledBal = end.balance.amount / API_AMOUNT_MULTIPLIER;
+      stores.balance.setBalance(settledBal);
+      const resumeRound = { ...info, data: opts.interpretBook(raw, info), active: false, balance: settledBal, raw };
+      await machine.transition('idle');
+      hud.showFatal('You have an unfinished round. Continue to see how it ends.', {
+        title: 'Round in progress',
+        tone: 'info',
+        actions: [
+          {
+            label: 'Continue',
+            variant: 'primary',
+            onSelect: () => {
+              hud!.hideNotice();
+              hud!.lockInput(); // no spins/buys while the recovered round replays
+              ctx.round = resumeRound;
+              void machine.transition('present').finally(() => hud!.unlockInput());
+            },
+          },
+        ],
+      });
     } else {
       stores.balance.setBalance(auth.balance.amount / API_AMOUNT_MULTIPLIER);
       await machine.transition('idle');

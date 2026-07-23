@@ -3,7 +3,7 @@
 // pure interpretBook (RGS book → its model), a mountView (the pixi scene) and a Present
 // phase (animate the round). Booted on the demo mock RGS — no backend.
 
-import { createStakeGame, roundEvents, type Phase } from '@stakeplate/core';
+import { createStakeGame, isStakeLaunch, roundEvents, type Phase } from '@stakeplate/core';
 import { createGameAudio } from '@stakeplate/core/audio';
 import { MiniSlot } from './MiniSlot';
 import { DemoNetwork } from './demoNetwork';
@@ -83,8 +83,12 @@ const game = createStakeGame<Data, MiniSlot, Ev>({
   },
   phases: [present],
   audio, // core auto-binds Music/Effects sliders + mute + unlock (add sounds via audio.load)
-  // The mock RGS owns the ladder (like a real `authenticate` would), per currency.
-  network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1, bonus: 100, super: 300, lucky: 2 } }),
+  // Bare dev → the mock RGS (owns the ladder, like a real `authenticate` would). Launched with
+  // a real `rgs_url` (e.g. `?rgs_url=…&sessionID=…`, incl. Stake `demo=true` fun-play) → the
+  // core authenticates + plays against that real RGS instead. See `isStakeLaunch`.
+  ...(isStakeLaunch()
+    ? {}
+    : { network: new DemoNetwork({ balance: 1000, currency: 'USD', betLevels: [0.2, 0.5, 1, 2, 5, 10], defaultBet: 1, rtp: 96, modes: { base: 1, bonus: 100, super: 300, lucky: 2 } }) }),
   hudHost: document.getElementById('hud')!,
   sceneHost: document.getElementById('scene')!,
 });

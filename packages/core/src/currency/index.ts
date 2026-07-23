@@ -22,12 +22,23 @@ export const EXTRA_DECIMALS: Readonly<Record<string, { decimals: number; symbol:
   IQD: { decimals: 3, symbol: 'IQD' }, // Iraqi Dinar
 };
 
+/** Symbol-only fixes required by Stake's RGS-communication approval guidelines, layered on
+ *  top of the @open-slot-ui table (which is otherwise correct on precision + symbol side).
+ *  Danish Krone must read "KR" — the lib ships lowercase "kr". Taiwan Dollar already resolves
+ *  to the accepted "NT$", so it needs no override. */
+export const SYMBOL_OVERRIDES: Readonly<Record<string, string>> = {
+  DKK: 'KR', // Danish Krone → "KR"
+};
+
 /**
- * `resolveCurrency`, but with the missing 3-decimal dinars/rials patched in. Use this
- * everywhere a currency code becomes a `CurrencySpec` so precision is correct for every
- * code — `createStakeGame` routes all of its resolution through here.
+ * `resolveCurrency`, but with the missing 3-decimal dinars/rials patched in and the
+ * approval-mandated symbol fixes applied. Use this everywhere a currency code becomes a
+ * `CurrencySpec` so precision + symbol are correct for every code — `createStakeGame`
+ * routes all of its resolution through here.
  */
 export function currencyFor(code: string): CurrencySpec {
-  const extra = code ? EXTRA_DECIMALS[code.toUpperCase()] : undefined;
-  return extra ? resolveCurrency(code, extra) : resolveCurrency(code);
+  const up = code ? code.toUpperCase() : '';
+  const symbol = up ? SYMBOL_OVERRIDES[up] : undefined;
+  const overrides = { ...(up ? EXTRA_DECIMALS[up] : undefined), ...(symbol ? { symbol } : undefined) };
+  return Object.keys(overrides).length ? resolveCurrency(code, overrides) : resolveCurrency(code);
 }

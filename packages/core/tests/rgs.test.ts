@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StakeNetworkManager } from '../src/rgs/StakeNetworkManager';
 import { MockNetworkManager } from '../src/rgs/MockNetworkManager';
 import { createNetwork } from '../src/rgs/network';
-import { readRuntime } from '../src/rgs/runtime';
+import { isStakeLaunch, readRuntime } from '../src/rgs/runtime';
 import { API_AMOUNT_MULTIPLIER, roundEvents } from '../src/rgs/protocol';
 
 type Captured = { url: string; method: string; body: unknown };
@@ -83,7 +83,55 @@ describe('createNetwork + readRuntime', () => {
     expect(r.replay).toEqual({ active: true, amount: 3, game: 'g', version: '2', mode: 'bonus', event: '9' });
   });
 
-  it('createNetwork picks the mock when demo (or a mock is supplied)', () => {
+  /** Read a launch runtime from a query string, exactly as the browser would. */
+  const fromUrl = (search: string) => {
+    const q = new URLSearchParams(search);
+    return readRuntime({ param: (n) => q.get(n) ?? undefined });
+  };
+
+  // The user's exact Stake "local redirect" launch URL: a real host + session + `demo=true`.
+  const STAKE_LOCAL_REDIRECT =
+    'sessionID=SID-abc==&rgs_url=rgsd.stake-engine.com&lang=en&currency=USD&device=desktop&social=false&demo=true';
+
+  it('a Stake fun-play launch (real rgs_url + demo=true) uses the REAL transport, not the mock', () => {
+    const runtime = fromUrl(STAKE_LOCAL_REDIRECT);
+    expect(runtime.demo).toBe(true); // fun-play flag is preserved…
+    expect(runtime.rgsUrlProvided).toBe(true);
+    expect(isStakeLaunch(runtime)).toBe(true);
+    expect(createNetwork(runtime)).toBeInstanceOf(StakeNetworkManager); // …but it talks to the RGS
+  });
+
+  it('that real transport authenticates against the launch host with the session', async () => {
+    const calls = stubFetch(() => ({ balance: { amount: 0, currency: 'USD' }, config: { minBet: 1, maxBet: 1, stepBet: 1, betLevels: [1], defaultBetLevel: 1 }, round: null }));
+    const net = createNetwork(fromUrl(STAKE_LOCAL_REDIRECT));
+    await net.authenticate();
+    expect(calls[0]!.url).toBe('https://rgsd.stake-engine.com/wallet/authenticate');
+    expect(calls[0]!.body).toEqual({ sessionID: 'SID-abc==', language: 'en' });
+  });
+
+  it('a real rgs_url without demo also uses the real transport', () => {
+    expect(createNetwork(fromUrl('rgs_url=https://rgs.test&sessionID=S'))).toBeInstanceOf(StakeNetworkManager);
+  });
+
+  it('demo=true with NO host falls back to the in-process mock (bare local click-around)', () => {
+    const runtime = fromUrl('demo=true');
+    expect(runtime.rgsUrlProvided).toBe(false);
+    expect(isStakeLaunch(runtime)).toBe(false);
+    expect(createNetwork(runtime)).toBeInstanceOf(MockNetworkManager);
+  });
+
+  it('?mock=true forces the mock even with a real rgs_url', () => {
+    const runtime = fromUrl('rgs_url=rgsd.stake-engine.com&sessionID=S&mock=true');
+    expect(isStakeLaunch(runtime)).toBe(false); // mock override → not a "stake launch"
+    expect(createNetwork(runtime)).toBeInstanceOf(MockNetworkManager);
+  });
+
+  it('a supplied mock instance always wins', () => {
+    const mock = new MockNetworkManager({ balance: 10 });
+    expect(createNetwork(fromUrl(STAKE_LOCAL_REDIRECT), mock)).toBe(mock);
+  });
+
+  it('createNetwork picks the mock when demo (overrides, no host)', () => {
     const runtime = readRuntime({ param: () => undefined, overrides: { demo: true } });
     expect(createNetwork(runtime)).toBeInstanceOf(MockNetworkManager);
   });

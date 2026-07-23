@@ -33,15 +33,22 @@ export class SpinPhase<T = unknown, V = unknown, E = unknown> implements Phase<T
       // The transport is game-agnostic (events: unknown); the game declared `E`, so we
       // narrow here — the game owns the shape it parses in `interpretBook`.
       const raw = play.round as Round<E>;
-      let settledApi = play.balance.amount;
-      if (raw.active) settledApi = (await network.endRound()).balance.amount;
       const info = roundInfo(raw, bet, cost);
       const data = ctx.interpretBook(raw, info);
+      // DO NOT /wallet/end-round here. An ACTIVE round is left OPEN so a refresh DURING
+      // Present (the game's reel/scene animation) can recover it — SettlePhase settles it
+      // once the round has finished playing out. For an active round `play.balance` is
+      // post-DEBIT (stake gone, win not yet credited), so the post-win balance the player
+      // sees at Settle is play.balance + the (authoritative-from-book) win; SettlePhase then
+      // reconciles to the server's own settled figure. A round that is already settled (a
+      // loss, or an immediate-settle mock) reports its FINAL balance in play.balance — use
+      // it verbatim, or the win would be double-counted.
+      const settledMoney = play.balance.amount / API_AMOUNT_MULTIPLIER;
       ctx.round = {
         ...info,
         data,
         active: raw.active ?? false,
-        balance: settledApi / API_AMOUNT_MULTIPLIER,
+        balance: raw.active ? settledMoney + info.totalWin : settledMoney,
         raw,
       };
     } catch (err) {
@@ -82,6 +89,20 @@ export class SettlePhase<T = unknown, V = unknown, E = unknown> implements Phase
       const minMs = ctx.stores.session.jurisdiction.minimumRoundDuration ?? 0;
       const elapsed = (ctx.ticker.now() - this.roundStartedAt) * 1000;
       if (minMs > 0 && elapsed < minMs) await ctx.ticker.delay(minMs - elapsed);
+      // The round has now finished playing out visually (Present + the min-duration pad).
+      // ONLY NOW settle it on the server — SpinPhase deliberately left it OPEN so a refresh
+      // mid-Present recovers the round instead of losing it. The win already shows (from the
+      // book); this reconciles to the server's authoritative post-settlement balance.
+      if (r.active) {
+        try {
+          const end = await ctx.network.endRound();
+          ctx.stores.balance.setBalance(end.balance.amount / API_AMOUNT_MULTIPLIER);
+        } catch (err) {
+          // The win is already credited locally; a settle hiccup self-heals on the next
+          // authenticate (the RGS reports the still-open round). Surface it, don't crash.
+          console.warn('[settle] end-round failed; balance reconciles on next authenticate:', err);
+        }
+      }
     }
     ctx.stores.ui.setSpinning(false);
     await ctx.fsm.transition('idle');
